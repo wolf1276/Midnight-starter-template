@@ -34,6 +34,7 @@ import {
 } from '../../api/src/index';
 import { type WalletFacade } from '@midnight-ntwrk/wallet-sdk-facade';
 import { ledger, type Ledger, State } from '../../contracts/src/managed/bboard/contract/index.js';
+import { State as DerivedState } from '@midnight-ntwrk/bboard-contract';
 import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
@@ -158,8 +159,8 @@ const displayDerivedState = (ledgerState: BBoardDerivedState | undefined, logger
   if (ledgerState === undefined) {
     logger.info(`No bulletin board state currently available`);
   } else {
-    const boardState = ledgerState.state === State.OCCUPIED ? 'occupied' : 'vacant';
-    const latestMessage = ledgerState.state === State.OCCUPIED ? ledgerState.message : 'none';
+    const boardState = ledgerState.state === DerivedState.OCCUPIED ? 'occupied' : 'vacant';
+    const latestMessage = ledgerState.state === DerivedState.OCCUPIED ? ledgerState.message : 'none';
     logger.info(`Current state is: '${boardState}'`);
     logger.info(`Current message is: '${latestMessage}'`);
     logger.info(`Current sequence is: ${ledgerState.sequence}`);

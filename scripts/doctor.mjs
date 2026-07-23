@@ -51,8 +51,9 @@ check('Compact CLI', () => {
 
 check('Compact compiler toolchain', () => {
   const out = sh('compact list');
-  if (!out.includes('*')) throw new Error("no toolchain installed — run 'compact update'");
-  return out.split('\n').find((l) => l.includes('*'))?.trim() ?? 'installed';
+  const active = out.split('\n').find((l) => l.includes('→') || l.includes('*'));
+  if (!active) throw new Error("no toolchain installed — run 'compact update'");
+  return active.trim();
 });
 
 check('Contract artifacts compiled', () => {
@@ -62,7 +63,7 @@ check('Contract artifacts compiled', () => {
 });
 
 check('CLI built', () => {
-  const dist = resolve(rootDir, 'cli', 'dist', 'launcher');
+  const dist = resolve(rootDir, 'cli', 'dist', 'cli', 'src', 'launcher');
   if (!existsSync(dist)) throw new Error("missing — run 'npm run build:cli'");
   return dist;
 });
@@ -89,6 +90,59 @@ check('node_modules installed', () => {
   const nm = resolve(rootDir, 'node_modules');
   if (!existsSync(nm)) throw new Error("missing — run 'npm install'");
   return 'present';
+});
+
+check('Local Docker services (node, indexer, proof-server)', () => {
+  let out;
+  try {
+    out = sh(`docker compose -f ${resolve(rootDir, 'docker', 'docker-compose.yml')} ps --format '{{.Service}} {{.State}}'`);
+  } catch {
+    throw new Error("could not query compose state — run 'npm run docker:start' or 'npm run blockchain:start'");
+  }
+  const required = ['node', 'indexer', 'proof-server'];
+  const running = new Map(
+    out
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        const [service, ...rest] = line.split(' ');
+        return [service, rest.join(' ')];
+      }),
+  );
+  const missing = required.filter((svc) => !running.has(svc) || !/running/i.test(running.get(svc)));
+  if (missing.length) {
+    throw new Error(`not running: ${missing.join(', ')} — run 'npm run blockchain:start' (or 'npm run docker:start')`);
+  }
+  return required.map((svc) => `${svc}: ${running.get(svc)}`).join(', ');
+});
+
+check('Node RPC health (http://localhost:9944/health)', () => {
+  try {
+    return sh('curl -sf http://localhost:9944/health');
+  } catch {
+    throw new Error("unreachable — node container may still be starting, or run 'npm run blockchain:start'");
+  }
+});
+
+check('Indexer reachable (http://localhost:8088)', () => {
+  // The indexer has no route at "/" (a healthy instance still 404s there), so check that the
+  // HTTP server itself responds at all rather than requiring a 2xx status.
+  try {
+    const code = sh("curl -s -o /dev/null -w '%{http_code}' http://localhost:8088");
+    if (!/^\d{3}$/.test(code)) throw new Error('no response');
+    return `HTTP ${code}`;
+  } catch {
+    throw new Error("unreachable — indexer container may still be starting, or run 'npm run blockchain:start'");
+  }
+});
+
+check('Proof server reachable (:6300)', () => {
+  try {
+    sh('curl -sf http://localhost:6300 || nc -z localhost 6300');
+    return 'reachable';
+  } catch {
+    throw new Error("unreachable — run 'npm run blockchain:start' and check 'docker compose -f docker/docker-compose.yml logs proof-server'");
+  }
 });
 
 check('Required ports free (3000, 6300, 8088, 9944)', () => {

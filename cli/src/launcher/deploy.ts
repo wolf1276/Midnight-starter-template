@@ -10,10 +10,9 @@ import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
 import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-private-state-provider';
-import { BBoardAPI, type BBoardProviders, type PrivateStateId, bboardPrivateStateKey } from '../../../api/src/index.js';
+import { BBoardAPI, type BBoardProviders, type PrivateStateId } from '../../../api/src/index.js';
 import { toHex, assertIsContractAddress } from '@midnight-ntwrk/midnight-js-utils';
 import { unshieldedToken } from '@midnight-ntwrk/midnight-js-protocol/ledger';
-import { Logger } from 'pino';
 import { randomBytes } from '../../../api/src/utils/index.js';
 import { BBoardPrivateState } from '../../../contracts/src/witnesses.js';
 
@@ -76,13 +75,15 @@ async function main() {
   console.log(`\nDeployed contract at address: ${address}\n`);
   // Machine-parseable line consumed by scripts/deploy/deploy.mjs to write
   // deployment.json and update web/.env.local — keep this format stable.
-  console.log(`DEPLOYMENT_RESULT ${JSON.stringify({
-    network,
-    contractAddress: address,
-    indexer: envConfiguration.indexer,
-    node: envConfiguration.node,
-    deployedAt: new Date().toISOString(),
-  })}`);
+  console.log(
+    `DEPLOYMENT_RESULT ${JSON.stringify({
+      network,
+      contractAddress: address,
+      indexer: envConfiguration.indexer,
+      node: envConfiguration.node,
+      deployedAt: new Date().toISOString(),
+    })}`,
+  );
 
   await walletProvider.stop();
   await testEnv.shutdown();
