@@ -16,8 +16,16 @@
 import { createLogger } from '../logger-utils.js';
 import { run } from '../index.js';
 import { StandaloneConfig } from '../config.js';
+import { runMain } from '../errors.js';
 
-const config = new StandaloneConfig();
-const logger = await createLogger(config.logDir, false);
-const testEnvironment = config.getEnvironment(logger);
-await run(config, testEnvironment, logger);
+const verbose = process.argv.slice(2).includes('--verbose') || process.argv.slice(2).includes('--debug');
+
+await runMain(
+  async () => {
+    const config = new StandaloneConfig();
+    const logger = await createLogger(config.logDir, false);
+    const testEnvironment = config.getEnvironment(logger);
+    await run(config, testEnvironment, logger);
+  },
+  { verbose, retryCommand: 'npm run standalone' },
+);

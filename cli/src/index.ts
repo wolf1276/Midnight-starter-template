@@ -28,6 +28,9 @@ import { syncWallet, waitForUnshieldedFunds } from './wallet-utils';
 import { generateDust } from './generate-dust';
 import { BBoardPrivateState } from '../../contracts/src/witnesses.js';
 import * as ui from './ui.js';
+import { classifyError, printCliError } from './errors.js';
+
+const verbose = process.argv.slice(2).includes('--verbose') || process.argv.slice(2).includes('--debug');
 
 // @ts-expect-error: It's needed to enable WebSocket usage through apollo
 globalThis.WebSocket = WebSocket;
@@ -162,7 +165,9 @@ const mainLoop = async (providers: BBoardProviders, rli: Interface, logger: Logg
             ui.warn(`Invalid choice: ${choice}`);
         }
       } catch (e) {
-        logError(logger, e);
+        const err = classifyError(e);
+        logger.error(err.stack ?? err.message);
+        printCliError(err, verbose);
         ui.info('Returning to main menu...');
       }
     }
@@ -251,8 +256,10 @@ export const run = async (config: Config, testEnv: TestEnvironment, logger: Logg
     };
     await mainLoop(providers, rli, logger);
   } catch (e) {
-    logError(logger, e);
-    ui.info('Exiting...');
+    const err = classifyError(e);
+    logger.error(err.stack ?? err.message);
+    printCliError(err, verbose);
+    process.exitCode = err.exitCode;
   } finally {
     try {
       rli.close();

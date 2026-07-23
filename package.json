@@ -25,11 +25,12 @@
     "contracts:deploy": "npm run deploy --",
     "deploy": "node scripts/deploy/deploy.mjs",
     "wallet:reset": "npm run wallet:reset -w @midnight-ntwrk/bboard-cli --",
-    "docker:start": "docker compose -f docker/docker-compose.yml --profile web up -d --build",
-    "docker:stop": "docker compose -f docker/docker-compose.yml --profile web down",
-    "docker:reset": "docker compose -f docker/docker-compose.yml --profile web down -v --remove-orphans",
-    "blockchain:start": "docker compose -f docker/docker-compose.yml up -d node indexer proof-server",
-    "blockchain:reset": "docker compose -f docker/docker-compose.yml rm -sf node indexer proof-server"
+    "docker:start": "node scripts/docker/start.mjs",
+    "docker:stop": "node scripts/docker/stop.mjs",
+    "docker:reset": "node scripts/docker/reset.mjs",
+    "blockchain:start": "node scripts/blockchain/start.mjs",
+    "blockchain:stop": "node scripts/blockchain/stop.mjs",
+    "blockchain:reset": "node scripts/blockchain/reset.mjs"
   },
   "workspaces": {
     "packages": [

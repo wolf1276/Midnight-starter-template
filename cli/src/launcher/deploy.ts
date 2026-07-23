@@ -22,13 +22,14 @@ import { unshieldedToken } from '@midnight-ntwrk/midnight-js-protocol/ledger';
 import { randomBytes } from '../../../api/src/utils/index.js';
 import { BBoardPrivateState } from '../../../contracts/src/witnesses.js';
 import * as ui from '../ui.js';
-import { color, type ActionableError, explainError, withQuiet } from '../ui.js';
+import { color, withQuiet } from '../ui.js';
 import {
   type DeploymentNetwork,
   loadDeploymentWalletSeed,
   saveDeploymentWalletSeed,
   walletFileDisplayPath,
 } from '../wallet-store.js';
+import { WalletError, DeploymentError, runMain } from '../errors.js';
 
 globalThis.WebSocket = WebSocket as unknown as typeof globalThis.WebSocket;
 
@@ -205,25 +206,14 @@ async function runFundingScreen(
   } catch (e) {
     ui.endLiveLine();
     if (e instanceof FundingTimeoutError) {
-      throw explainableError({
-        what: 'Wallet funding timed out',
-        why: `No test tokens arrived at ${address} within ${FUNDING_TIMEOUT_MS / 60_000} minutes.`,
-        fix: `Open ${envConfiguration.faucet ?? 'the network faucet'}, request tokens for the address above, confirm they arrived, then retry.`,
-        nextCommand: `npm run deploy -- --network ${network}`,
+      throw new WalletError({
+        title: 'Wallet Funding Timed Out',
+        whatHappened: `No test tokens arrived at ${address} within ${FUNDING_TIMEOUT_MS / 60_000} minutes.`,
+        howToFix: `Open ${envConfiguration.faucet ?? 'the network faucet'}, request tokens for the address above, confirm they arrived, then retry:\n\n  npm run deploy -- --network ${network}`,
       });
     }
     throw e;
   }
-}
-
-class ExplainableError extends Error {
-  constructor(public readonly details: ActionableError) {
-    super(details.what);
-  }
-}
-
-function explainableError(details: ActionableError): ExplainableError {
-  return new ExplainableError(details);
 }
 
 async function main() {
@@ -329,11 +319,10 @@ async function main() {
   const deployedState = await quiet(() => providers.publicDataProvider.queryContractState(address));
   if (!deployedState) {
     verifyStep.fail('Deployment could not be verified');
-    throw explainableError({
-      what: 'Contract deployed but is not yet queryable on the indexer',
-      why: `The transaction submitted successfully, but querying ${address} on the indexer returned no state.`,
-      fix: 'The indexer may still be catching up. Wait a few seconds and check the address on the explorer, or re-run deploy.',
-      nextCommand: `npm run deploy -- --network ${network}`,
+    throw new DeploymentError({
+      title: 'Contract Deployed But Not Yet Queryable',
+      whatHappened: `The transaction submitted successfully, but querying ${address} on the indexer returned no state.`,
+      howToFix: `The indexer may still be catching up. Wait a few seconds and check the address on the explorer, or re-run:\n\n  npm run deploy -- --network ${network}`,
     });
   }
   verifyStep.succeed('Deployment verified — contract is live and queryable');
@@ -369,61 +358,13 @@ async function main() {
   process.exit(0);
 }
 
-function classifyError(e: unknown): ActionableError {
-  if (e instanceof ExplainableError) {
-    return e.details;
-  }
-  let message = e instanceof Error ? e.message : String(e);
-  if (!message && e instanceof AggregateError) {
-    message = e.errors.map((inner) => (inner instanceof Error ? inner.message : String(inner))).join('; ');
-  }
-  if (!message && e instanceof Error) {
-    message = e.name;
-  }
-  if (/ECONNREFUSED|ENOTFOUND|EAI_AGAIN|fetch failed|network/i.test(message)) {
-    return {
-      what: 'Could not reach the Midnight network',
-      why: message,
-      fix: 'Check your internet connection and that the node/indexer/proof-server endpoints are reachable.',
-      nextCommand: `npm run deploy -- --network ${network}`,
-    };
-  }
-  if (/proof.?server/i.test(message)) {
-    return {
-      what: 'Proof server is unavailable',
-      why: message,
-      fix: 'Make sure Docker is running so the proof server container can start, then retry.',
-      nextCommand: `npm run deploy -- --network ${network}`,
-    };
-  }
-  if (/status code 5\d\d/i.test(message)) {
-    const requestUrl = getAxiosRequestUrl(e);
-    return {
-      what: 'A remote Midnight service is temporarily unavailable',
-      why: requestUrl
-        ? `${requestUrl} returned an error response. This is an issue with that remote service, not your project.`
-        : `A remote request failed with a server error. ${message}`,
-      fix: 'This is usually temporary — wait a bit and retry.',
-      nextCommand: `npm run deploy -- --network ${network}`,
-    };
-  }
-  return {
-    what: 'Deployment failed',
-    why: message,
-    fix: verbose
-      ? 'Check the diagnostic output above and the log file for more detail.'
-      : 'Re-run with --verbose for full diagnostic output.',
-    nextCommand: verbose ? undefined : `npm run deploy -- --network ${network} --verbose`,
-  };
-}
+const retryCommand = `npm run deploy -- --network ${network}`;
 
-main().catch(async (e) => {
-  const details = classifyError(e);
-  explainError(details);
-  logger.error(e instanceof Error ? (e.stack ?? e.message) : JSON.stringify(e, Object.getOwnPropertyNames(e)));
-  if (verbose && e instanceof Error && e.stack) {
-    console.error(color.dim(e.stack));
-  }
-  await testEnv.shutdown().catch(() => {});
-  process.exit(1);
+await runMain(main, {
+  verbose,
+  retryCommand,
+  onFatal: async (err) => {
+    logger.error(err.stack ?? err.message);
+    await testEnv.shutdown().catch(() => {});
+  },
 });

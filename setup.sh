@@ -5,14 +5,15 @@
 #
 # What it does:
 #   1. Detect OS and verify/install prerequisites (Node.js, Docker, Compact toolchain).
-#   2. npm install (root workspaces: contracts, api, cli, web).
-#   3. Create web/.env.local from web/.env.example if missing.
-#   4. Compile the contract and build the CLI/API workspaces (contract artifacts + type bindings).
-#   5. Install git hooks.
-#   6. Pull required Docker images and start the local dev stack (node, indexer, proof-server).
-#   7. Verify RPC connectivity to node/indexer/proof-server.
-#   8. Run `npm run doctor` as a final health check.
-#   9. Print a success summary with the commands available next.
+#   2. Check prerequisites (Node.js, Docker, Compact toolchain), auto-fixing where possible.
+#   3. Pre-flight checks: disk space, filesystem permissions, internet connectivity, Docker memory.
+#   4. npm install (root workspaces: contracts, api, cli, web).
+#   5. Create web/.env.local from web/.env.example if missing.
+#   6. Compile the contract and build the CLI/API workspaces (contract artifacts + type bindings).
+#   7. Install git hooks.
+#   8. Pull required Docker images and start the local dev stack (node, indexer, proof-server).
+#   9. Verify RPC connectivity to node/indexer/proof-server.
+#  10. Run `npm run doctor` as a final health check, then print a success summary.
 #
 # Safe to re-run: every step only installs/configures what's missing.
 set -euo pipefail
@@ -52,7 +53,7 @@ die() {
 }
 
 REQUIRED_NODE_MAJOR=24
-TOTAL_STEPS=9
+TOTAL_STEPS=10
 
 # --- 0/9: Baseline tooling (git, curl) --------------------------------------
 if ! command -v git >/dev/null 2>&1; then
@@ -252,12 +253,15 @@ if ! compact list 2>/dev/null | grep -q '\*'; then
 fi
 ok "Compact compiler toolchain ready"
 
-step "3/${TOTAL_STEPS} Installing dependencies (npm workspaces: contracts, api, cli, web)"
+step "3/${TOTAL_STEPS} Pre-flight checks (disk space, permissions, connectivity, Docker memory)"
+node scripts/setup/run-preflight.mjs "$@" || exit 1
+
+step "4/${TOTAL_STEPS} Installing dependencies (npm workspaces: contracts, api, cli, web)"
 info "⏳ Running npm install (this can take a few minutes on first run)..."
-npm install
+node scripts/setup/run-step.mjs "npm install" "$@" -- npm install
 ok "Dependencies installed"
 
-step "4/${TOTAL_STEPS} Creating environment files"
+step "5/${TOTAL_STEPS} Creating environment files"
 if [ ! -f "web/.env.local" ]; then
   cp web/.env.example web/.env.local
   ok "Created web/.env.local from web/.env.example"
@@ -265,12 +269,12 @@ else
   ok "web/.env.local already exists (left untouched)"
 fi
 
-step "5/${TOTAL_STEPS} Compiling contract and building workspaces (artifacts + type bindings)"
+step "6/${TOTAL_STEPS} Compiling contract and building workspaces (artifacts + type bindings)"
 info "⏳ Running npm run build:all..."
-npm run build:all
+node scripts/setup/run-step.mjs "npm run build:all" "$@" -- npm run build:all
 ok "Contract compiled, TypeScript bindings and CLI/API built"
 
-step "6/${TOTAL_STEPS} Installing git hooks"
+step "7/${TOTAL_STEPS} Installing git hooks"
 if [ -d .git ]; then
   mkdir -p .git/hooks
   cat > .git/hooks/pre-commit <<'HOOK'
@@ -283,7 +287,7 @@ else
   warn "Not a git repository — skipping git hooks"
 fi
 
-step "7/${TOTAL_STEPS} Pulling Docker images and starting the local dev stack (node, indexer, proof-server)"
+step "8/${TOTAL_STEPS} Pulling Docker images and starting the local dev stack (node, indexer, proof-server)"
 if [ ! -f "docker/.env" ] || ! grep -q '^INDEXER_SECRET=.\+' "docker/.env" 2>/dev/null; then
   # 32 random bytes hex-encoded — dev-only secret to satisfy the indexer's config schema,
   # unique per machine instead of the fixed value every clone of this repo used to share.
@@ -294,13 +298,13 @@ else
 fi
 
 info "⏳ Pulling images (this can take a while on first run)..."
-docker compose -f docker/docker-compose.yml pull node indexer proof-server
+node scripts/setup/run-step.mjs "docker compose pull" "$@" -- docker compose -f docker/docker-compose.yml pull node indexer proof-server
 ok "Docker images pulled"
 
-docker compose -f docker/docker-compose.yml up -d node indexer proof-server
+node scripts/setup/run-step.mjs "docker compose up" "$@" -- docker compose -f docker/docker-compose.yml up -d node indexer proof-server
 ok "Containers started (node, indexer, proof-server)"
 
-step "8/${TOTAL_STEPS} Waiting for services and verifying RPC connectivity"
+step "9/${TOTAL_STEPS} Waiting for services and verifying RPC connectivity"
 # Waits for the HTTP server at $url to respond at all. `require_2xx=1` additionally requires a
 # 2xx status (used for the node's /health endpoint); otherwise any HTTP response counts as
 # "reachable" — e.g. the indexer legitimately 404s at "/" even when perfectly healthy.
@@ -333,19 +337,7 @@ else
   warn "proof-server did not respond on :6300 yet — check 'docker compose -f docker/docker-compose.yml logs proof-server'"
 fi
 
-step "9/${TOTAL_STEPS} Running full health checks"
+step "10/${TOTAL_STEPS} Running full health checks"
 npm run doctor || die "Some checks failed — see above. Fix them, then re-run: npm run doctor"
 
-printf "\n${GREEN}${BOLD}✓ Setup complete — ready for development${RESET}\n\n"
-cat <<EOF
-Local stack running: node (:9944), indexer (:8088), proof-server (:6300)
-
-Next steps:
-  npm run dev                                      # start the Next.js frontend at http://localhost:3000
-  npm run contracts:deploy -- --network preview     # deploy the contract (preview or preprod)
-  npm run doctor                                    # re-run health checks any time
-  npm run docker:stop                               # stop the local stack
-  npm run docker:reset                              # stop and wipe local chain state
-
-See README.md for the full walkthrough, SETUP-AGENT.md for the agent-facing operational playbook.
-EOF
+node scripts/setup/print-success.mjs

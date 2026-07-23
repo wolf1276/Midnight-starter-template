@@ -7,38 +7,35 @@ import { tmpdir } from 'node:os';
 import { select } from '@inquirer/prompts';
 import { versions } from '../lib/versions.mjs';
 import { ensureDockerRunning, ensureLocalMidnightServices } from '../lib/infra.mjs';
+import { color } from '../lib/ui.mjs';
+import { FilesystemError, NodeVersionError, classifyError, printCliError } from '../lib/errors.mjs';
+import { checks as preflightChecks } from '../lib/preflight.mjs';
+import { printDeploymentComplete } from '../lib/success.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, '..', '..');
 
-// --- Terminal formatting helpers (no deps, matches cli/src/ui.ts) ---
-const isTTY = process.stdout.isTTY && !process.env.NO_COLOR;
-const c = (code) => (s) => (isTTY ? `\x1b[${code}m${s}\x1b[0m` : s);
-const dim = c('2');
-const bold = c('1');
-const green = c('32');
-const red = c('31');
-const yellow = c('33');
-const cyan = c('36');
-const RULE = dim('\u2501'.repeat(36));
+// --- Terminal formatting helpers, backed by scripts/lib/ui.mjs (same visual language as
+// setup.sh/doctor.mjs/cli/src/ui.ts \u2014 no local reimplementation). ---
+const RULE = color.dim('\u2501'.repeat(36));
 
 const fmt = {
-  ok: (msg) => console.log(`  ${green('\u2713')} ${msg}`),
-  fail: (msg) => console.error(`  ${red('\u2717')} ${msg}`),
-  warn: (msg) => console.log(`  ${yellow('\u26A0')} ${msg}`),
+  ok: (msg) => console.log(`  ${color.green('\u2713')} ${msg}`),
+  fail: (msg) => console.error(`  ${color.red('\u2717')} ${msg}`),
+  warn: (msg) => console.log(`  ${color.yellow('\u26A0')} ${msg}`),
   section: (title) => {
     console.log(`\n${RULE}`);
-    console.log(`  ${bold(title)}`);
+    console.log(`  ${color.bold(title)}`);
     console.log(`${RULE}`);
   },
-  info: (msg) => console.log(`  ${dim(msg)}`),
-  cmd: (msg) => console.log(`    ${cyan(msg)}`),
-  dim,
-  bold,
-  green,
-  red,
-  yellow,
-  cyan,
+  info: (msg) => console.log(`  ${color.dim(msg)}`),
+  cmd: (msg) => console.log(`    ${color.cyan(msg)}`),
+  dim: color.dim,
+  bold: color.bold,
+  green: color.green,
+  red: color.red,
+  yellow: color.yellow,
+  cyan: color.cyan,
 };
 
 const args = process.argv.slice(2);
@@ -129,7 +126,7 @@ let deployStart = Date.now();
 // Must run before any interactive prompt: if we re-exec under a different Node binary,
 // the prompt would otherwise run twice (once now, once again in the re-executed process).
 function ensureRequiredNodeVersion() {
-  const requiredNodeMajor = 24;
+  const requiredNodeMajor = versions.requiredNodeMajor;
   const nodeVersion = process.version.slice(1);
   const [nodeMajor] = nodeVersion.split('.').map(Number);
   if (nodeMajor >= requiredNodeMajor) {
@@ -151,11 +148,14 @@ function ensureRequiredNodeVersion() {
       }
     } catch {}
   }
-  fmt.fail(`Node.js >= ${requiredNodeMajor}.x required (current: ${nodeVersion}).`);
-  fmt.info('Install via nvm:');
-  fmt.cmd(`nvm install ${requiredNodeMajor} && nvm use ${requiredNodeMajor}`);
-  fmt.info('Or download from:');
-  fmt.cmd('https://nodejs.org/');
+  printCliError(
+    new NodeVersionError({
+      title: 'Unsupported Node.js Version',
+      whatHappened: `Required:\nNode.js >=${requiredNodeMajor}\n\nDetected:\nNode.js ${nodeVersion}`,
+      howToFix: `nvm install ${requiredNodeMajor}\nnvm use ${requiredNodeMajor}\n\nor download from https://nodejs.org/`,
+    }),
+    verbose,
+  );
   process.exit(1);
 }
 
@@ -166,9 +166,14 @@ async function main() {
 
   const rootNodeModules = resolve(rootDir, 'node_modules');
   if (!existsSync(rootNodeModules)) {
-    fmt.fail("Dependencies not installed.");
-    fmt.info("Run:");
-    fmt.cmd("npm install");
+    printCliError(
+      new FilesystemError({
+        title: 'Dependencies Not Installed',
+        whatHappened: 'node_modules is missing at the repository root.',
+        howToFix: 'Run:\n\n  npm install',
+      }),
+      verbose,
+    );
     process.exit(1);
   }
   fmt.ok('Dependencies installed');
@@ -186,32 +191,30 @@ async function main() {
   fmt.info(`Network: ${network}`);
 
   try {
-    execSync('compact --version > /dev/null 2>&1', { shell: true });
+    preflightChecks.compactCli();
     fmt.ok('Compact compiler found');
-  } catch {
-    fmt.fail('Compact compiler not found.');
-    fmt.info('Install the Midnight Compact toolchain:');
-    fmt.cmd('curl --proto \'=https\' --tlsv1.2 -sSf https://raw.githubusercontent.com/midnightntwrk/compact/main/install.sh | sh');
+  } catch (e) {
+    printCliError(e, verbose);
     process.exit(1);
   }
 
   try {
-    const out = execSync('compact list', { encoding: 'utf-8', shell: true });
-    const active = out.split('\n').find((l) => l.includes('→') || l.includes('*'));
-    if (!active) throw new Error('no active toolchain');
-    fmt.ok(`Compact toolchain active — ${active.trim()}`);
-  } catch {
-    fmt.fail('No active Compact toolchain.');
-    fmt.info("Install one via:");
-    fmt.cmd('compact update');
+    fmt.ok(`Compact toolchain active — ${preflightChecks.compactCompiler()}`);
+  } catch (e) {
+    printCliError(e, verbose);
     process.exit(1);
   }
 
   const cliPackageDir = resolve(rootDir, 'cli');
   if (!existsSync(resolve(cliPackageDir, 'package.json')) || !existsSync(resolve(cliPackageDir, 'node_modules'))) {
-    fmt.fail("CLI workspace (cli/) missing or dependencies not installed.");
-    fmt.info("Run from repo root:");
-    fmt.cmd('npm install');
+    printCliError(
+      new FilesystemError({
+        title: 'CLI Workspace Not Ready',
+        whatHappened: 'cli/ is missing or its dependencies are not installed.',
+        howToFix: 'Run from repo root:\n\n  npm install',
+      }),
+      verbose,
+    );
     process.exit(1);
   }
   fmt.ok('CLI workspace ready');
@@ -220,12 +223,10 @@ async function main() {
   try {
     execSync(`docker image inspect ${proofServerImage} > /dev/null 2>&1 || docker pull ${proofServerImage} > /dev/null 2>&1`, { shell: true });
     fmt.ok('Proof Server image available');
-  } catch {
-    fmt.fail('Could not find or pull the Proof Server image.');
-    fmt.info(`Image: ${proofServerImage}`);
-    fmt.info('Check your Docker registry access and network connection, then retry.');
-    fmt.info('The proof server will be started automatically as a container during deployment.');
-    process.exit(1);
+  } catch (e) {
+    const err = classifyError(new Error(e.stderr?.toString?.() || `Could not find or pull ${proofServerImage}`), 'npm run deploy');
+    printCliError(err, verbose);
+    process.exit(err.exitCode);
   }
 
   const managedDir = resolve(rootDir, 'contracts', 'src', 'managed', 'bboard', 'contract');
@@ -330,14 +331,11 @@ async function main() {
           console.error(stderrOutput);
         }
       } else {
-        process.stderr.write(stderrOutput);
-        if (!verbose && stderrOutput.trim()) {
-          console.error('');
-          fmt.fail('Deployment failed.');
-          fmt.info('Re-run with --verbose for full diagnostic output:');
-          fmt.cmd(`npm run deploy -- --network ${network} --verbose`);
-          console.error('');
-        }
+        const err = classifyError(
+          new Error(stderrOutput.trim() || `Deployment failed (exit code ${code})`),
+          `npm run deploy -- --network ${network}`,
+        );
+        printCliError(err, verbose);
       }
     }
     rmSync(resultDir, { recursive: true, force: true });
@@ -371,26 +369,14 @@ function printFinalSummary(result) {
     envUpdated = true;
   }
 
-  const ms = Date.now() - deployStart;
-  const elapsed = ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
-
-  fmt.section(`\u2705 Deployment Complete`);
-  console.log(`  ${fmt.dim('Network:')}            ${result.network}`);
-  console.log(`  ${fmt.dim('Contract Address:')}   ${result.contractAddress}`);
-  if (result.explorerUrl) {
-    console.log(`  ${fmt.dim('Explorer URL:')}       ${result.explorerUrl}`);
-  }
-  console.log(`  ${fmt.dim('Indexer URL:')}        ${result.indexer}`);
-  console.log(`  ${fmt.dim('Deployment Record:')}  ${resolve(rootDir, 'deployment.json')}`);
-  console.log(
-    `  ${fmt.dim('web/.env.local:')}     ${envUpdated ? `${fmt.green('updated')} with NEXT_PUBLIC_CONTRACT_ADDRESS` : 'not found, skipped'}`,
-  );
-  console.log(`  ${fmt.dim('Total Time:')}         ${elapsed}`);
-  console.log('');
-  fmt.info('Next steps:');
-  fmt.cmd('npm run dev                         Start the frontend');
-  fmt.cmd('npm run contracts:deploy -- --network ' + result.network + '  Deploy again');
-  console.log('');
+  printDeploymentComplete({
+    address: result.contractAddress,
+    explorerUrl: result.explorerUrl,
+    wallet: 'see "Wallet Address" above',
+    network: result.network,
+    frontendUpdated: envUpdated,
+    nextCommand: `npm run dev\nnpm run contracts:deploy -- --network ${result.network}  # deploy again`,
+  });
 }
 
 main();

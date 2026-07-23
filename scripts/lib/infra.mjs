@@ -1,17 +1,19 @@
 // Local Midnight infrastructure lifecycle management (Docker + local dev stack).
 //
-// Used by scripts/deploy/deploy.mjs so `npm run deploy` can fully prepare the local
-// environment instead of just checking it and exiting. Mirrors the "docker:start" /
-// "blockchain:start" package.json scripts, but drives them automatically and waits for
-// the resulting containers to actually become healthy.
-import { execSync, spawn } from 'node:child_process';
-import { platform } from 'node:os';
+// Used by scripts/deploy/deploy.mjs and the scripts/docker|blockchain/*.mjs wrappers so
+// `npm run deploy` / `npm run blockchain:start` can fully prepare the local environment
+// instead of just checking it and exiting. Waits for the resulting containers to actually
+// become healthy, attempts automatic recovery before giving up, and reports every failure
+// through the shared CLIError system (never a raw Docker/curl error).
+import { execSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { DockerError, ProofServerError, classifyError, printCliError } from './errors.mjs';
+import { checkRequiredPorts, printPortConflicts } from './ports.mjs';
+import { tryRestartContainer, tryStartDocker } from './recovery.mjs';
 
 const sh = (cmd, opts = {}) => execSync(cmd, { encoding: 'utf-8', shell: true, stdio: ['ignore', 'pipe', 'pipe'], ...opts });
-
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** True when running in CI or any other non-interactive context — we must fail fast there. */
@@ -25,50 +27,6 @@ function dockerIsUp() {
     return true;
   } catch {
     return false;
-  }
-}
-
-function attemptDockerStart(fmt) {
-  const plat = platform();
-
-  if (plat === 'linux') {
-    try {
-      sh('systemctl --user start docker');
-      return;
-    } catch {}
-
-    const desktopCandidates = [
-      '/usr/bin/docker-desktop',
-      '/opt/docker-desktop/bin/docker-desktop',
-      `${process.env.HOME}/.local/bin/docker-desktop`,
-    ];
-    const desktop = desktopCandidates.find((p) => existsSync(p));
-    if (desktop) {
-      try {
-        spawn(desktop, [], { detached: true, stdio: 'ignore' }).unref();
-        return;
-      } catch {}
-    }
-
-    fmt.info('Could not start the Docker daemon automatically.');
-    fmt.info('You may need elevated privileges. Try:');
-    fmt.cmd('sudo systemctl start docker');
-  } else if (plat === 'darwin') {
-    try {
-      sh('open -a Docker');
-    } catch {
-      fmt.info('Could not launch Docker Desktop automatically.');
-      fmt.info('Open it manually from Applications, or install it:');
-      fmt.cmd('https://docs.docker.com/desktop/install/mac-install/');
-    }
-  } else if (plat === 'win32') {
-    try {
-      const dockerDesktopExe = 'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe';
-      spawn('cmd', ['/c', 'start', '""', `"${dockerDesktopExe}"`], { detached: true, stdio: 'ignore', shell: true }).unref();
-    } catch {
-      fmt.info('Could not launch Docker Desktop automatically.');
-      fmt.info('Start it manually from the Start menu.');
-    }
   }
 }
 
@@ -86,35 +44,28 @@ export async function ensureDockerRunning(fmt) {
   }
 
   if (isNonInteractive()) {
-    fmt.fail('Docker is not running.');
-    fmt.info('Running in a non-interactive environment — refusing to wait indefinitely.');
-    fmt.info('Start Docker before running this command, e.g.:');
-    fmt.cmd('sudo systemctl start docker');
+    printCliError(
+      new DockerError({
+        title: 'Docker Daemon Not Running',
+        whatHappened: 'Docker is not running, and this is a non-interactive environment — refusing to wait indefinitely.',
+        howToFix: 'Start Docker before running this command, e.g.:\n\n  sudo systemctl start docker',
+      }),
+      false,
+    );
     process.exit(1);
   }
 
   fmt.warn('Docker is not running.');
-  fmt.info('Attempting to start Docker...');
-  attemptDockerStart(fmt);
-
-  const pollIntervalMs = 2000;
-  const initialTimeoutMs = 60000;
-  let waited = 0;
-  while (waited < initialTimeoutMs) {
-    await sleep(pollIntervalMs);
-    waited += pollIntervalMs;
-    if (dockerIsUp()) {
-      fmt.ok('Docker is running.');
-      return;
-    }
+  const { recovered, detail } = await tryStartDocker();
+  if (recovered) {
+    fmt.ok(`Docker is running (${detail}).`);
+    return;
   }
 
-  fmt.section('\u2717 Docker could not be started automatically.');
-  fmt.info('Please start Docker.');
-  fmt.info('The deployment will continue automatically once Docker becomes available.');
-  fmt.info('Checking every 2 seconds... (Ctrl+C to cancel)');
+  fmt.warn(`Could not start Docker automatically (${detail}).`);
+  fmt.info('Please start Docker manually. Checking every 2 seconds... (Ctrl+C to cancel)');
   while (!dockerIsUp()) {
-    await sleep(pollIntervalMs);
+    await sleep(2000);
   }
   fmt.ok('Docker is running.');
 }
@@ -167,29 +118,11 @@ function checkProofServer() {
   }
 }
 
-function printProofServerFailure(fmt, composeFile) {
-  fmt.section('\u2717 Proof Server failed to start.');
-  fmt.info('Possible causes:');
-  fmt.info('  \u2022 Docker has insufficient memory.');
-  fmt.info('  \u2022 A required port is already in use (6300, 8088, 9944).');
-  fmt.info('  \u2022 The container failed to initialize.');
-  fmt.info('');
-  fmt.info('Container: bboard-proof-server');
-  fmt.info('Inspect logs:');
-  fmt.cmd(`docker compose -f ${composeFile} logs proof-server`);
-  fmt.info('Check container status:');
-  fmt.cmd('docker ps');
-  fmt.info('Suggested fixes:');
-  fmt.info('  \u2022 Increase Docker Desktop memory allocation (Settings \u2192 Resources).');
-  fmt.info('  \u2022 Free the required ports, or stop conflicting containers.');
-  fmt.info('  \u2022 Reset and retry:');
-  fmt.cmd('npm run blockchain:reset && npm run deploy');
-}
-
 /**
  * Ensures the local Docker Compose stack (node, indexer, proof-server) exists, is running,
  * and is healthy — creating/starting containers as needed via `docker compose up -d`, which
- * transparently handles both the "missing" and "stopped" cases.
+ * transparently handles both the "missing" and "stopped" cases. Attempts an automatic restart
+ * once before surfacing a classified failure.
  */
 export async function ensureLocalMidnightServices(rootDir, fmt, verbose) {
   fmt.section('\u{1F510} Proof Server');
@@ -205,6 +138,15 @@ export async function ensureLocalMidnightServices(rootDir, fmt, verbose) {
   if (running.length < required.length) {
     const missing = required.filter((s) => !before.has(s));
     const stopped = required.filter((s) => before.has(s) && !/running/i.test(before.get(s)));
+
+    // Only a foreign (non-Docker) process holding the port is a real conflict here — a Docker
+    // container on the port is almost certainly this project's own stack being restarted.
+    const conflicts = checkRequiredPorts().filter((c) => c.owner?.kind === 'process');
+    if (conflicts.length) {
+      printPortConflicts(conflicts);
+      process.exit(1);
+    }
+
     if (missing.length) fmt.info(`Creating container(s): ${missing.join(', ')}...`);
     if (stopped.length) fmt.info(`Starting container(s): ${stopped.join(', ')}...`);
     fmt.info('Running Docker Compose...');
@@ -213,9 +155,9 @@ export async function ensureLocalMidnightServices(rootDir, fmt, verbose) {
         stdio: verbose ? 'inherit' : ['ignore', 'pipe', 'pipe'],
       });
     } catch (e) {
-      if (verbose) console.error(e.stderr?.toString?.() ?? e.message);
-      printProofServerFailure(fmt, composeFile);
-      process.exit(1);
+      const err = classifyError(new Error(e.stderr?.toString?.() || e.message), 'npm run blockchain:start');
+      printCliError(err, verbose);
+      process.exit(err.exitCode);
     }
   } else {
     fmt.ok('Proof Server already running.');
@@ -233,7 +175,29 @@ export async function ensureLocalMidnightServices(rootDir, fmt, verbose) {
   }
 
   if (!healthy) {
-    printProofServerFailure(fmt, composeFile);
+    fmt.warn('Services did not become healthy in time — attempting to restart the Proof Server once...');
+    const { recovered } = tryRestartContainer(composeFile, 'proof-server');
+    if (recovered) {
+      waited = 0;
+      healthy = checkRpc() && checkIndexer() && checkProofServer();
+      while (!healthy && waited < timeoutMs) {
+        await sleep(pollIntervalMs);
+        waited += pollIntervalMs;
+        healthy = checkRpc() && checkIndexer() && checkProofServer();
+      }
+    }
+  }
+
+  if (!healthy) {
+    printCliError(
+      new ProofServerError({
+        title: 'Proof Server Failed To Start',
+        whatHappened:
+          'One or more of node/indexer/proof-server did not become healthy in time, and an automatic restart did not fix it.\n\nPossible causes: Docker has insufficient memory, a required port is already in use, or a container failed to initialize.',
+        howToFix: `Inspect logs and reset:\n\n  docker compose -f ${composeFile} logs\n  npm run blockchain:reset\n  npm run blockchain:start`,
+      }),
+      verbose,
+    );
     process.exit(1);
   }
   fmt.ok('Proof Server is healthy.');

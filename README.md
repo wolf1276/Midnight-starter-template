@@ -32,6 +32,7 @@ or [1AM](https://1am.com/) wallet extension installed.
 - [Git](https://git-scm.com/)
 - [Docker](https://docs.docker.com/get-docker/)
 - Node.js — `setup.sh` checks and installs this for you
+- Windows — run `setup.sh` inside [WSL2](https://learn.microsoft.com/windows/wsl/install), not native PowerShell/Git Bash
 
 ## What `setup.sh` Does
 
