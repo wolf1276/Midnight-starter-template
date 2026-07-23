@@ -1,4 +1,5 @@
 import { appendFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import { WebSocket } from 'ws';
 import { createLogger } from '../logger-utils.js';
 import { type Config, PreviewRemoteConfig, PreprodRemoteConfig } from '../config.js';
@@ -24,6 +25,12 @@ import { randomBytes } from '../../../api/src/utils/index.js';
 import { BBoardPrivateState } from '../../../contracts/src/witnesses.js';
 import * as ui from '../ui.js';
 import { color, type ActionableError, explainError, withQuiet } from '../ui.js';
+import {
+  type DeploymentNetwork,
+  loadDeploymentWalletSeed,
+  saveDeploymentWalletSeed,
+  walletFileDisplayPath,
+} from '../wallet-store.js';
 
 globalThis.WebSocket = WebSocket as unknown as typeof globalThis.WebSocket;
 
@@ -229,12 +236,23 @@ async function main() {
     envStep.succeed('Environment ready');
   }
 
-  const walletStep = ui.step('Creating deployment wallet');
-  const seed = toHex(randomBytes(32));
+  const deploymentNetwork = network as DeploymentNetwork;
+  const existingSeed = loadDeploymentWalletSeed(deploymentNetwork);
+  const isNewWallet = existingSeed === undefined;
+
+  const walletStep = ui.step(isNewWallet ? '🔐 Creating Deployment Wallet' : '🔐 Loading Deployment Wallet');
+  const seed = existingSeed ?? toHex(randomBytes(32));
   const walletProvider = await quiet(() => MidnightWalletProvider.build(logger, envConfiguration, seed));
   const walletFacade: WalletFacade = walletProvider.wallet;
   await quiet(() => walletProvider.start());
-  walletStep.succeed('Wallet created');
+
+  if (isNewWallet) {
+    const savedPath = saveDeploymentWalletSeed(deploymentNetwork, seed);
+    walletStep.succeed('Wallet created');
+    ui.success(`Saved to ${path.relative(process.cwd(), savedPath) || walletFileDisplayPath(deploymentNetwork)}`);
+  } else {
+    walletStep.succeed('Existing wallet loaded');
+  }
 
   let unshieldedState = await quiet(() => getInitialUnshieldedState(logger, walletFacade.unshielded));
   const walletAddress = await getUnshieldedAddress(logger, walletFacade);

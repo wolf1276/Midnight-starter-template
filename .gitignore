@@ -63,5 +63,8 @@ managed/
 # Local deployment artifacts (ephemeral, per-developer)
 /deployment.json
 
+# Persistent per-developer deployment wallets (contain seeds — never commit)
+contracts/.midnight/
+
 .claude
 .midnight-expert*.heapsnapshot

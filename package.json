@@ -24,6 +24,7 @@
     "contracts:test": "npm run test -w @midnight-ntwrk/bboard-contract",
     "contracts:deploy": "npm run deploy --",
     "deploy": "node scripts/deploy/deploy.mjs",
+    "wallet:reset": "npm run wallet:reset -w @midnight-ntwrk/bboard-cli --",
     "docker:start": "docker compose -f docker/docker-compose.yml --profile web up -d --build",
     "docker:stop": "docker compose -f docker/docker-compose.yml --profile web down",
     "docker:reset": "docker compose -f docker/docker-compose.yml --profile web down -v --remove-orphans",
