@@ -48,11 +48,18 @@ async function main() {
   }
   console.log(`✓ Node.js ${nodeVersion}`);
 
+  const rootNodeModules = resolve(rootDir, 'node_modules');
+  if (!existsSync(rootNodeModules)) {
+    console.error("✗ Dependencies not installed. Run 'npm install' (from contracts/ or the repo root), then retry.");
+    process.exit(1);
+  }
+  console.log('✓ Dependencies installed');
+
   try {
     execSync('docker info > /dev/null 2>&1', { shell: true });
     console.log('✓ Docker is running');
   } catch {
-    console.error('✗ Docker is not running. Install Docker Desktop and start it, then retry.');
+    console.error('✗ Docker is not running. Install Docker Desktop (or start the Docker daemon) and start it, then retry.');
     process.exit(1);
   }
 
@@ -60,7 +67,37 @@ async function main() {
     execSync('compact --version > /dev/null 2>&1', { shell: true });
     console.log('✓ Compact compiler found');
   } catch {
-    console.error('✗ Compact compiler not found. Install the Midnight Compact toolchain (see docs.midnight.network).');
+    console.error('✗ Compact compiler not found. Install the Midnight Compact toolchain: https://docs.midnight.network/relnotes/compact-toolchain');
+    process.exit(1);
+  }
+
+  try {
+    const out = execSync('compact list', { encoding: 'utf-8', shell: true });
+    const active = out.split('\n').find((l) => l.includes('→') || l.includes('*'));
+    if (!active) throw new Error('no active toolchain');
+    console.log(`✓ Compact toolchain active — ${active.trim()}`);
+  } catch {
+    console.error("✗ No active Compact toolchain. Run 'compact update' to install one, then retry.");
+    process.exit(1);
+  }
+
+  const cliPackageDir = resolve(rootDir, 'cli');
+  if (!existsSync(resolve(cliPackageDir, 'package.json')) || !existsSync(resolve(cliPackageDir, 'node_modules'))) {
+    console.error(
+      "✗ Midnight CLI workspace (cli/) is missing or its dependencies aren't installed. Run 'npm install' from the repo root, then retry.",
+    );
+    process.exit(1);
+  }
+  console.log('✓ Midnight CLI workspace found');
+
+  const proofServerImage = 'midnightntwrk/proof-server:8.0.3';
+  try {
+    execSync(`docker image inspect ${proofServerImage} > /dev/null 2>&1 || docker pull ${proofServerImage} > /dev/null 2>&1`, { shell: true });
+    console.log(`✓ Proof Server image available (${proofServerImage})`);
+  } catch {
+    console.error(
+      `✗ Could not find or pull the Proof Server image (${proofServerImage}). Check your Docker registry access/network connection, then retry. It will be started automatically as a container during deployment.`,
+    );
     process.exit(1);
   }
 
