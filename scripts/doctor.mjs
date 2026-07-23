@@ -6,6 +6,7 @@ import { existsSync, accessSync, constants, readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { versions } from './lib/versions.mjs';
+import * as ui from './lib/ui.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, '..');
@@ -197,16 +198,25 @@ check('Pinned image versions match config/versions.json', () => {
   return 'in sync';
 });
 
-console.log('\nMidnight bboard — environment health check\n');
+ui.section('🩺 Midnight bboard — environment health check');
 for (const { name, ok, detail } of checks) {
-  const icon = ok ? '✔' : '✘';
-  console.log(`${icon} ${name}${detail ? ` — ${detail}` : ''}`);
+  const line = `${name}${detail ? ` — ${detail}` : ''}`;
+  if (ok) {
+    ui.success(line);
+  } else {
+    ui.fail(line);
+  }
 }
 
-console.log('');
 if (hasFailure) {
-  console.log('❌ Not ready — fix the items marked ✘ above, then re-run: npm run doctor');
+  const failed = checks.filter((c) => !c.ok);
+  ui.explainError({
+    what: `${failed.length} health check${failed.length === 1 ? '' : 's'} failed — environment not ready`,
+    why: failed.map((c) => `${c.name}: ${c.detail}`).join('; '),
+    fix: 'Fix the items marked ✗ above (each one lists its own fix), then re-run this check.',
+    nextCommand: 'npm run doctor',
+  });
   process.exit(1);
 } else {
-  console.log('✅ Ready for development');
+  ui.section('✅ Ready for development');
 }

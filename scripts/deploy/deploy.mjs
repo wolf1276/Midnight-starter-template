@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { spawn, execSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
+import { select } from '@inquirer/prompts';
 import { versions } from '../lib/versions.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -40,7 +41,7 @@ const fmt = {
 };
 
 const args = process.argv.slice(2);
-let network = 'preview';
+let network = null;
 const verbose = args.includes('--verbose') || args.includes('--debug');
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--network' && i + 1 < args.length) {
@@ -51,44 +52,123 @@ for (let i = 0; i < args.length; i++) {
   }
 }
 
-if (!['preview', 'preprod'].includes(network)) {
+if (network !== null && !['preview', 'preprod'].includes(network)) {
   fmt.fail(`Unsupported network '${network}'. Use 'preview' or 'preprod'.`);
   process.exit(1);
 }
 
+const networkConfigPath = resolve(rootDir, 'contracts', '.midnight', 'config.json');
+
+function readLastNetwork() {
+  if (!existsSync(networkConfigPath)) return null;
+  try {
+    const config = JSON.parse(readFileSync(networkConfigPath, 'utf-8'));
+    return config.lastNetwork ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLastNetwork(selected) {
+  try {
+    mkdirSync(dirname(networkConfigPath), { recursive: true });
+    let config = {};
+    if (existsSync(networkConfigPath)) {
+      try {
+        config = JSON.parse(readFileSync(networkConfigPath, 'utf-8'));
+      } catch {
+        config = {};
+      }
+    }
+    config.lastNetwork = selected;
+    writeFileSync(networkConfigPath, JSON.stringify(config, null, 2) + '\n');
+  } catch {}
+}
+
+const NETWORK_CHOICES = [
+  {
+    value: 'preview',
+    name: 'Preview',
+    description: 'Public testing network\nRecommended for development\nFaucet available',
+  },
+  {
+    value: 'preprod',
+    name: 'Preprod',
+    description: 'Pre-production network\nClosest to mainnet\nRecommended before production',
+  },
+];
+
+async function selectNetwork() {
+  const lastNetwork = readLastNetwork();
+  const choices = NETWORK_CHOICES.map((choice) => ({
+    value: choice.value,
+    name: choice.value === lastNetwork ? `${choice.name} ${fmt.yellow('⭐ Last Used')}` : choice.name,
+    description: choice.description,
+  }));
+
+  let selected;
+  try {
+    selected = await select({
+      message: `${fmt.cyan('🌐 Select Deployment Network')}`,
+      choices,
+      default: lastNetwork ?? undefined,
+    });
+  } catch {
+    console.log('\nDeployment cancelled.');
+    process.exit(0);
+  }
+
+  console.log(`${fmt.green('✓')} Selected: ${NETWORK_CHOICES.find((c) => c.value === selected).name}`);
+  writeLastNetwork(selected);
+  return selected;
+}
+
 let deployStart = Date.now();
 
+// Must run before any interactive prompt: if we re-exec under a different Node binary,
+// the prompt would otherwise run twice (once now, once again in the re-executed process).
+function ensureRequiredNodeVersion() {
+  const requiredNodeMajor = 24;
+  const nodeVersion = process.version.slice(1);
+  const [nodeMajor] = nodeVersion.split('.').map(Number);
+  if (nodeMajor >= requiredNodeMajor) {
+    fmt.ok(`Node.js ${nodeVersion}`);
+    return;
+  }
+  const nvmDir = process.env.NVM_DIR || `${process.env.HOME}/.nvm`;
+  const nvmSh = `${nvmDir}/nvm.sh`;
+  if (existsSync(nvmSh)) {
+    try {
+      const nvmNodePath = execSync(`. ${nvmSh} && nvm which ${requiredNodeMajor}`, { encoding: 'utf-8', shell: true }).trim();
+      if (nvmNodePath && existsSync(nvmNodePath)) {
+        console.log(`Node.js ${nodeVersion} is too old. Re-executing with ${nvmNodePath}...`);
+        const child = spawn(nvmNodePath, process.argv.slice(1), { stdio: 'inherit', cwd: process.cwd(), shell: true });
+        child.on('exit', (code) => process.exit(code ?? 1));
+        // The re-executed process takes over from here; this one must not continue on
+        // to the interactive prompt or anything else.
+        return new Promise(() => {});
+      }
+    } catch {}
+  }
+  fmt.fail(`Node.js >= ${requiredNodeMajor}.x required (current: ${nodeVersion}).`);
+  fmt.info('Install via nvm:');
+  fmt.cmd(`nvm install ${requiredNodeMajor} && nvm use ${requiredNodeMajor}`);
+  fmt.info('Or download from:');
+  fmt.cmd('https://nodejs.org/');
+  process.exit(1);
+}
+
 async function main() {
+  await ensureRequiredNodeVersion();
+
+  if (network === null) {
+    network = await selectNetwork();
+  }
+
   deployStart = Date.now();
 
   fmt.section(`\u{1F680} Midnight Contract Deployment`);
   fmt.info(`Network: ${network}`);
-
-  const requiredNodeMajor = 24;
-  const nodeVersion = process.version.slice(1);
-  const [nodeMajor] = nodeVersion.split('.').map(Number);
-  if (nodeMajor < requiredNodeMajor) {
-    const nvmDir = process.env.NVM_DIR || `${process.env.HOME}/.nvm`;
-    const nvmSh = `${nvmDir}/nvm.sh`;
-    if (existsSync(nvmSh)) {
-      try {
-        const nvmNodePath = execSync(`. ${nvmSh} && nvm which ${requiredNodeMajor}`, { encoding: 'utf-8', shell: true }).trim();
-        if (nvmNodePath && existsSync(nvmNodePath)) {
-          console.log(`Node.js ${nodeVersion} is too old. Re-executing with ${nvmNodePath}...`);
-          const child = spawn(nvmNodePath, process.argv.slice(1), { stdio: 'inherit', cwd: process.cwd(), shell: true });
-          child.on('exit', (code) => process.exit(code ?? 1));
-          return;
-        }
-      } catch {}
-    }
-    fmt.fail(`Node.js >= ${requiredNodeMajor}.x required (current: ${nodeVersion}).`);
-    fmt.info('Install via nvm:');
-    fmt.cmd(`nvm install ${requiredNodeMajor} && nvm use ${requiredNodeMajor}`);
-    fmt.info('Or download from:');
-    fmt.cmd('https://nodejs.org/');
-    process.exit(1);
-  }
-  fmt.ok(`Node.js ${nodeVersion}`);
 
   const rootNodeModules = resolve(rootDir, 'node_modules');
   if (!existsSync(rootNodeModules)) {
@@ -187,6 +267,12 @@ async function main() {
   ];
   if (verbose) cliArgs.push('--verbose');
 
+  // Preprod's indexer has a much longer transaction history than preview's, and wallet
+  // sync currently has to walk all of it before it can report a synced state — so preprod
+  // runs need a bigger heap than preview to get through sync without hitting the OOM
+  // detection below.
+  const heapSizeMb = network === 'preprod' ? 8192 : 4096;
+
   let stderrOutput = '';
   const child = spawn('node', cliArgs, {
     cwd: resolve(rootDir, 'cli'),
@@ -194,7 +280,7 @@ async function main() {
     env: {
       ...process.env,
       TS_NODE_PROJECT: resolve(rootDir, 'cli', 'tsconfig.json'),
-      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --max-old-space-size=4096`.trim(),
+      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --max-old-space-size=${heapSizeMb}`.trim(),
       // Hide ExperimentalWarning/DeprecationWarning noise (ts-node loader, Node internals)
       // by default; --verbose re-enables the full raw output for troubleshooting.
       ...(verbose ? {} : { NODE_NO_WARNINGS: '1' }),
@@ -204,26 +290,58 @@ async function main() {
     },
   });
 
+  // Buffered rather than echoed live, even with --verbose: an out-of-memory crash needs to
+  // be inspected (see isOutOfMemoryCrash below) before deciding whether to show it at all.
   child.stderr.on('data', (chunk) => {
-    process.stderr.write(chunk);
-    if (!verbose) stderrOutput += chunk.toString();
+    stderrOutput += chunk.toString();
   });
+
+  const isOutOfMemoryCrash = (output) =>
+    /FATAL ERROR/.test(output) && /JavaScript heap out of memory|Reached heap limit/.test(output);
+
+  function printOutOfMemoryPanel() {
+    fmt.section('\u{1F4A5} Wallet Sync Ran Out of Memory');
+    fmt.fail(`Node ran out of memory (${heapSizeMb}MB heap) while syncing the ${network} wallet.`);
+    fmt.info('');
+    fmt.info(
+      network === 'preprod'
+        ? "Preprod has a long transaction history, and wallet sync currently has to walk all of it before it's considered synced — this can require several GB of memory."
+        : 'Wallet sync needed more memory than was available.',
+    );
+    fmt.info('');
+    fmt.info('You can:');
+    fmt.info('  • Re-run the command — sync progress is not preserved across crashes, but transient memory pressure may not recur');
+    fmt.info('  • Close other memory-heavy applications and retry');
+    fmt.info(`  • Raise the heap limit further: NODE_OPTIONS=--max-old-space-size=${heapSizeMb * 2} npm run deploy -- --network ${network}`);
+    fmt.info('  • Re-run with --verbose to see full sync diagnostics leading up to the crash');
+    fmt.info('');
+  }
 
   child.on('exit', (code) => {
     if (code === 0 && existsSync(resultFile)) {
       try {
         const result = JSON.parse(readFileSync(resultFile, 'utf-8'));
-        saveDeploymentArtifacts(result);
+        printFinalSummary(result);
       } catch (e) {
         fmt.warn(`Could not parse deployment result: ${e.message}`);
       }
     } else if (code !== 0) {
-      if (!verbose && stderrOutput.trim()) {
-        console.error('');
-        fmt.fail('Deployment failed.');
-        fmt.info('Re-run with --verbose for full diagnostic output:');
-        fmt.cmd(`npm run deploy -- --network ${network} --verbose`);
-        console.error('');
+      if (isOutOfMemoryCrash(stderrOutput)) {
+        printOutOfMemoryPanel();
+        if (verbose) {
+          console.error('');
+          console.error(fmt.dim('Raw crash output:'));
+          console.error(stderrOutput);
+        }
+      } else {
+        process.stderr.write(stderrOutput);
+        if (!verbose && stderrOutput.trim()) {
+          console.error('');
+          fmt.fail('Deployment failed.');
+          fmt.info('Re-run with --verbose for full diagnostic output:');
+          fmt.cmd(`npm run deploy -- --network ${network} --verbose`);
+          console.error('');
+        }
       }
     }
     rmSync(resultDir, { recursive: true, force: true });
@@ -231,7 +349,7 @@ async function main() {
   });
 }
 
-function saveDeploymentArtifacts(result) {
+function printFinalSummary(result) {
   const deploymentPath = resolve(rootDir, 'deployment.json');
   let history = [];
   if (existsSync(deploymentPath)) {
@@ -244,8 +362,8 @@ function saveDeploymentArtifacts(result) {
   }
   history.unshift(result);
   writeFileSync(deploymentPath, JSON.stringify(history, null, 2) + '\n');
-  fmt.ok('Saved deployment record to deployment.json');
 
+  let envUpdated = false;
   const envLocalPath = resolve(rootDir, 'web', '.env.local');
   if (existsSync(envLocalPath)) {
     let env = readFileSync(envLocalPath, 'utf-8');
@@ -254,19 +372,24 @@ function saveDeploymentArtifacts(result) {
       ? env.replace(/^NEXT_PUBLIC_CONTRACT_ADDRESS=.*$/m, line)
       : `${env.trimEnd()}\n\n# Set automatically by npm run contracts:deploy\n${line}\n`;
     writeFileSync(envLocalPath, env);
-    fmt.ok('Updated web/.env.local with NEXT_PUBLIC_CONTRACT_ADDRESS');
+    envUpdated = true;
   }
 
   const ms = Date.now() - deployStart;
   const elapsed = ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
 
-  fmt.section(`\u2705 Deployment completed in ${elapsed}`);
-  console.log(`  ${fmt.dim('Network:')}   ${result.network}`);
-  console.log(`  ${fmt.dim('Contract:')}  ${result.contractAddress}`);
+  fmt.section(`\u2705 Deployment Complete`);
+  console.log(`  ${fmt.dim('Network:')}            ${result.network}`);
+  console.log(`  ${fmt.dim('Contract Address:')}   ${result.contractAddress}`);
   if (result.explorerUrl) {
-    console.log(`  ${fmt.dim('Explorer:')}  ${result.explorerUrl}`);
+    console.log(`  ${fmt.dim('Explorer URL:')}       ${result.explorerUrl}`);
   }
-  console.log(`  ${fmt.dim('Indexer:')}   ${result.indexer}`);
+  console.log(`  ${fmt.dim('Indexer URL:')}        ${result.indexer}`);
+  console.log(`  ${fmt.dim('Deployment Record:')}  ${resolve(rootDir, 'deployment.json')}`);
+  console.log(
+    `  ${fmt.dim('web/.env.local:')}     ${envUpdated ? `${fmt.green('updated')} with NEXT_PUBLIC_CONTRACT_ADDRESS` : 'not found, skipped'}`,
+  );
+  console.log(`  ${fmt.dim('Total Time:')}         ${elapsed}`);
   console.log('');
   fmt.info('Next steps:');
   fmt.cmd('npm run dev                         Start the frontend');

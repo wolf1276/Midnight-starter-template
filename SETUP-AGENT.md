@@ -153,7 +153,7 @@ back to manual steps if `setup.sh` fails and you need to diagnose why.
    needed there, the deploy script itself fails loudly if unreachable.
 10. **Run health checks** (step 9/9): `npm run doctor` (equivalently `npm run verify`), which now
     also checks that the local Docker services are running and RPC-reachable (see Validation
-    Checklist). If it exits non-zero, fix the specific `✘` line it prints (each failure message
+    Checklist). If it exits non-zero, fix the specific `✗` line it prints (each failure message
     names the exact remedial command) and re-run — do not proceed past a failing `doctor` run.
 11. **Print success summary**: on a clean run `setup.sh` prints the local stack's listening ports
     and the commands available next (`npm run dev`, `npm run contracts:deploy`, `npm run doctor`,

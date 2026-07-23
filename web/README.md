@@ -65,12 +65,14 @@ and configured for the same network as `NEXT_PUBLIC_NETWORK_ID` to deploy or joi
 
 ## Environment variables
 
-See [`.env.example`](./.env.example). Only two variables exist:
+See [`.env.example`](./.env.example) and [`docs/ENVIRONMENT.md`](../docs/ENVIRONMENT.md) for the
+full reference. Three variables exist:
 
 | Variable | Description |
 | --- | --- |
 | `NEXT_PUBLIC_NETWORK_ID` | The Midnight network this app targets (`preprod`, `preview`, `testnet`, `mainnet`, `devnet`, `undeployed`). Must match your wallet's network. |
 | `NEXT_PUBLIC_LOGGING_LEVEL` | Log verbosity for the in-browser logger (`trace`…`silent`). |
+| `NEXT_PUBLIC_CONTRACT_ADDRESS` | Set automatically by `npm run contracts:deploy`; safe to leave blank — the UI also lets you paste/select an address. |
 
 Indexer, indexer-websocket and proof-server endpoints are **not** configured here — they're supplied at
 runtime by the connected wallet extension (`connectedAPI.getConfiguration()`), so the same build works

@@ -3,16 +3,14 @@ import path from 'node:path';
 import { WebSocket } from 'ws';
 import { createLogger } from '../logger-utils.js';
 import { type Config, PreviewRemoteConfig, PreprodRemoteConfig } from '../config.js';
-import { type EnvironmentConfiguration, type TestEnvironment } from '@midnight-ntwrk/testkit-js';
+import {
+  type EnvironmentConfiguration,
+  type TestEnvironment,
+  logger as sdkInternalLogger,
+} from '@midnight-ntwrk/testkit-js';
 import { type WalletFacade } from '@midnight-ntwrk/wallet-sdk-facade';
 import { MidnightWalletProvider } from '../midnight-wallet-provider.js';
-import {
-  FundingTimeoutError,
-  getInitialUnshieldedState,
-  getUnshieldedAddress,
-  syncWallet,
-  waitForUnshieldedFunds,
-} from '../wallet-utils.js';
+import { FundingTimeoutError, getUnshieldedAddress, syncWallet, waitForUnshieldedFunds } from '../wallet-utils.js';
 import { generateDust } from '../generate-dust.js';
 import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
@@ -39,6 +37,12 @@ const verbose = rawArgs.includes('--verbose') || rawArgs.includes('--debug');
 const network = rawArgs.find((a) => !a.startsWith('--')) ?? 'preview';
 const networkLabel = network === 'preprod' ? 'Preprod' : 'Preview';
 
+// The SDK ships its own module-level pino-pretty logger that writes straight to the
+// process's stdout file descriptor (bypassing process.stdout.write, so withQuiet() below
+// can't intercept it). Silencing it here is the only way to keep its internal chatter
+// ("Initializing wallet builder...", "Creating dust wallet...") out of default-mode output.
+if (!verbose) sdkInternalLogger.level = 'silent';
+
 const config: Config = network === 'preprod' ? new PreprodRemoteConfig() : new PreviewRemoteConfig();
 const logger = await createLogger(config.logDir, !verbose);
 const testEnv: TestEnvironment = config.getEnvironment(logger);
@@ -57,8 +61,6 @@ const generateStoragePassword = (): string => `${toHex(randomBytes(24))}-${Date.
 
 const FUNDING_TIMEOUT_MS = 15 * 60 * 1000;
 const BALANCE_POLL_INTERVAL_MS = 5_000;
-
-const deployStart = Date.now();
 
 interface FaucetOutage {
   reason: string;
@@ -254,19 +256,33 @@ async function main() {
     walletStep.succeed('Existing wallet loaded');
   }
 
-  let unshieldedState = await quiet(() => getInitialUnshieldedState(logger, walletFacade.unshielded));
+  // Wait for full sync before reading the balance — otherwise an already-funded wallet
+  // briefly reports a stale 0 balance and the funding screen flashes for no reason.
+  const syncStep = ui.step('🔄 Synchronizing wallet');
+  const syncedState = await quiet(() => syncWallet(logger, walletFacade));
+  syncStep.succeed('Wallet synchronized');
+
   const walletAddress = await getUnshieldedAddress(logger, walletFacade);
+  let unshieldedState = syncedState.unshielded;
   let nightBalance = unshieldedState.balances[unshieldedToken().raw] ?? 0n;
 
-  // Always show the wallet address and balance — never leave the user guessing what to fund.
-  ui.section('💰 Deployment Wallet');
-  ui.summary([
-    ['Network', networkLabel],
-    ['Wallet Address', walletAddress],
-    ['Current Balance', `${nightBalance} tNIGHT`],
-  ]);
-
-  if (nightBalance === 0n) {
+  if (nightBalance > 0n) {
+    const fundingStep = ui.step('💰 Checking wallet balance');
+    fundingStep.succeed('Wallet already funded');
+    ui.section('💰 Deployment Wallet');
+    ui.summary([
+      ['Network', networkLabel],
+      ['Wallet Address', walletAddress],
+      ['Balance', `${nightBalance} tNIGHT`],
+    ]);
+    ui.info('Continuing deployment...');
+  } else {
+    ui.section('💰 Deployment Wallet');
+    ui.summary([
+      ['Network', networkLabel],
+      ['Wallet Address', walletAddress],
+      ['Current Balance', `${nightBalance} tNIGHT`],
+    ]);
     unshieldedState = await runFundingScreen(walletFacade, envConfiguration, walletAddress, startupFaucetOutage);
     nightBalance = unshieldedState.balances[unshieldedToken().raw] ?? 0n;
     ui.section('🚀 Continuing Deployment');
@@ -323,16 +339,6 @@ async function main() {
   verifyStep.succeed('Deployment verified — contract is live and queryable');
 
   const explorerUrl = config.explorerUrl ? config.explorerUrl.replace('{contractAddress}', address) : '';
-  ui.section('📄 Deployment Summary');
-  const summaryRows: Array<[string, string]> = [
-    ['Network', network],
-    ['Contract Address', address],
-    ['Indexer', envConfiguration.indexer],
-  ];
-  if (explorerUrl) {
-    summaryRows.splice(2, 0, ['Explorer', explorerUrl]);
-  }
-  ui.summary(summaryRows);
 
   logger.info(`Deployed contract at address: ${address}`);
   // Machine-readable result consumed by scripts/deploy/deploy.mjs to write deployment.json
@@ -357,7 +363,9 @@ async function main() {
   await quiet(() => walletProvider.stop());
   await quiet(() => testEnv.shutdown());
 
-  ui.section(`✅ Deployment completed in ${ui.elapsedSince(deployStart)}`);
+  // The single, polished success screen is printed by scripts/deploy/deploy.mjs once this
+  // process exits — it also owns writing deployment.json and updating web/.env.local, so
+  // all of that belongs in one final summary instead of being split across two processes.
   process.exit(0);
 }
 

@@ -46,9 +46,9 @@ curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/midnightn
 
 ### `npm run doctor` reports failures
 
-**What happened:** One or more health checks failed (shown with `✘`).
+**What happened:** One or more health checks failed (shown with `✗`).
 
-**Why:** Various — each `✘` line names the exact issue.
+**Why:** Various — each `✗` line names the exact issue.
 
 **Fix:** Read the specific failure message — each one includes the command to fix it. Then
 re-run `npm run doctor`.

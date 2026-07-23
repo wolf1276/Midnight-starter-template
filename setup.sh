@@ -20,16 +20,28 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
-BOLD='\033[1m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-RED='\033[0;31m'
-RESET='\033[0m'
+# Colors are disabled when NO_COLOR is set or output isn't a terminal, matching cli/src/ui.ts.
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  BOLD='\033[1m'
+  DIM='\033[2m'
+  GREEN='\033[0;32m'
+  YELLOW='\033[0;33m'
+  RED='\033[0;31m'
+  RESET='\033[0m'
+else
+  BOLD='' DIM='' GREEN='' YELLOW='' RED='' RESET=''
+fi
 
-ok()   { printf "${GREEN}✔${RESET} %s\n" "$1"; }
+RULE_CHARS=$(printf '━%.0s' $(seq 1 36))
+
+ok()   { printf "${GREEN}✓${RESET} %s\n" "$1"; }
 warn() { printf "${YELLOW}⚠${RESET} %s\n" "$1"; }
-err()  { printf "${RED}✘${RESET} %s\n" "$1"; }
-step() { printf "\n${BOLD}%s${RESET}\n" "$1"; }
+err()  { printf "${RED}✗${RESET} %s\n" "$1"; }
+info() { printf "${DIM}%s${RESET}\n" "$1"; }
+# Section header matching cli/src/ui.ts's section(): blank line, dim rule, bold title, dim rule, blank line.
+step() {
+  printf "\n${DIM}${RULE_CHARS}${RESET}\n${BOLD}%s${RESET}\n${DIM}${RULE_CHARS}${RESET}\n\n" "$1"
+}
 
 # Print the failing message(s) then exit 1, always pointing at `npm run doctor` as the
 # general-purpose next step for diagnosing whatever's still broken.
@@ -241,6 +253,7 @@ fi
 ok "Compact compiler toolchain ready"
 
 step "3/${TOTAL_STEPS} Installing dependencies (npm workspaces: contracts, api, cli, web)"
+info "⏳ Running npm install (this can take a few minutes on first run)..."
 npm install
 ok "Dependencies installed"
 
@@ -253,6 +266,7 @@ else
 fi
 
 step "5/${TOTAL_STEPS} Compiling contract and building workspaces (artifacts + type bindings)"
+info "⏳ Running npm run build:all..."
 npm run build:all
 ok "Contract compiled, TypeScript bindings and CLI/API built"
 
@@ -279,7 +293,7 @@ else
   ok "docker/.env already exists (left untouched)"
 fi
 
-warn "Pulling images (this can take a while on first run)..."
+info "⏳ Pulling images (this can take a while on first run)..."
 docker compose -f docker/docker-compose.yml pull node indexer proof-server
 ok "Docker images pulled"
 
@@ -322,7 +336,7 @@ fi
 step "9/${TOTAL_STEPS} Running full health checks"
 npm run doctor || die "Some checks failed — see above. Fix them, then re-run: npm run doctor"
 
-printf "\n${GREEN}${BOLD}✅ Setup complete — ready for development${RESET}\n\n"
+printf "\n${GREEN}${BOLD}✓ Setup complete — ready for development${RESET}\n\n"
 cat <<EOF
 Local stack running: node (:9944), indexer (:8088), proof-server (:6300)
 
