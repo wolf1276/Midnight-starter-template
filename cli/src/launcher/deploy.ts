@@ -1,4 +1,4 @@
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, writeFileSync } from 'node:fs';
 import { WebSocket } from 'ws';
 import { createLogger } from '../logger-utils.js';
 import { type Config, PreviewRemoteConfig, PreprodRemoteConfig } from '../config.js';
@@ -44,6 +44,9 @@ const testEnv: TestEnvironment = config.getEnvironment(logger);
 const rawLogPath = `${config.logDir}.raw.log`;
 const quiet = <T>(fn: () => Promise<T>): Promise<T> =>
   withQuiet(!verbose, (chunk) => appendFileSync(rawLogPath, chunk), fn);
+
+/** A fresh, per-run password for the local private-state store — never persisted or reused. */
+const generateStoragePassword = (): string => `${toHex(randomBytes(24))}-${Date.now()}`;
 
 const FUNDING_TIMEOUT_MS = 15 * 60 * 1000;
 const BALANCE_POLL_INTERVAL_MS = 5_000;
@@ -265,11 +268,14 @@ async function main() {
   ui.section('📦 Deploying Contract');
 
   const zkConfigProvider = new NodeZkConfigProvider<'post' | 'takeDown'>(config.zkConfigPath);
+  // Generated once per run and only ever kept in memory — this store is scratch space for a
+  // single deployment, never reopened across processes, so there's nothing to persist.
+  const storagePassword = generateStoragePassword();
   const providers: BBoardProviders = {
     privateStateProvider: levelPrivateStateProvider<PrivateStateId, BBoardPrivateState>({
       privateStateStoreName: config.privateStateStoreName,
       signingKeyStoreName: `${config.privateStateStoreName}-signing-keys`,
-      privateStoragePasswordProvider: () => 'Bboard-Test-2026!',
+      privateStoragePasswordProvider: () => storagePassword,
       accountId: seed,
     }),
     publicDataProvider: indexerPublicDataProvider(envConfiguration.indexer, envConfiguration.indexerWS),
@@ -285,6 +291,19 @@ async function main() {
   assertIsContractAddress(address);
   deployStep.succeed('Contract deployed');
 
+  const verifyStep = ui.step('Verifying deployment');
+  const deployedState = await quiet(() => providers.publicDataProvider.queryContractState(address));
+  if (!deployedState) {
+    verifyStep.fail('Deployment could not be verified');
+    throw explainableError({
+      what: 'Contract deployed but is not yet queryable on the indexer',
+      why: `The transaction submitted successfully, but querying ${address} on the indexer returned no state.`,
+      fix: 'The indexer may still be catching up. Wait a few seconds and check the address on the explorer, or re-run deploy.',
+      nextCommand: `npm run deploy -- --network ${network}`,
+    });
+  }
+  verifyStep.succeed('Deployment verified — contract is live and queryable');
+
   const explorerUrl = config.explorerUrl ? config.explorerUrl.replace('{contractAddress}', address) : '';
   ui.section('📄 Deployment Summary');
   const summaryRows: Array<[string, string]> = [
@@ -298,18 +317,24 @@ async function main() {
   ui.summary(summaryRows);
 
   logger.info(`Deployed contract at address: ${address}`);
-  // Machine-parseable line consumed by scripts/deploy/deploy.mjs to write
-  // deployment.json and update web/.env.local — keep this format stable.
-  console.log(
-    `DEPLOYMENT_RESULT ${JSON.stringify({
-      network,
-      contractAddress: address,
-      indexer: envConfiguration.indexer,
-      node: envConfiguration.node,
-      deployedAt: new Date().toISOString(),
-      ...(config.explorerUrl ? { explorerUrl } : {}),
-    })}`,
-  );
+  // Machine-readable result consumed by scripts/deploy/deploy.mjs to write deployment.json
+  // and update web/.env.local. Written to a file (path passed via env var) rather than
+  // printed to stdout, so parsing doesn't depend on scraping a magic line out of otherwise
+  // free-form CLI output.
+  const resultFile = process.env.DEPLOYMENT_RESULT_FILE;
+  if (resultFile) {
+    writeFileSync(
+      resultFile,
+      JSON.stringify({
+        network,
+        contractAddress: address,
+        indexer: envConfiguration.indexer,
+        node: envConfiguration.node,
+        deployedAt: new Date().toISOString(),
+        ...(config.explorerUrl ? { explorerUrl } : {}),
+      }),
+    );
+  }
 
   await quiet(() => walletProvider.stop());
   await quiet(() => testEnv.shutdown());

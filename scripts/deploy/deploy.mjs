@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import { spawn, execSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
+import { existsSync, readFileSync, writeFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
+import { versions } from '../lib/versions.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, '..', '..');
@@ -138,7 +140,7 @@ async function main() {
   }
   fmt.ok('CLI workspace ready');
 
-  const proofServerImage = 'midnightntwrk/proof-server:8.0.3';
+  const proofServerImage = versions.proofServerImage;
   try {
     execSync(`docker image inspect ${proofServerImage} > /dev/null 2>&1 || docker pull ${proofServerImage} > /dev/null 2>&1`, { shell: true });
     fmt.ok('Proof Server image available');
@@ -174,6 +176,9 @@ async function main() {
 
   fmt.section(`\u{1F4E6} Deploying to ${network}`);
 
+  const resultDir = mkdtempSync(join(tmpdir(), 'bboard-deploy-'));
+  const resultFile = join(resultDir, 'result.json');
+
   const cliArgs = [
     '--experimental-specifier-resolution=node',
     '--loader', 'ts-node/esm',
@@ -182,11 +187,10 @@ async function main() {
   ];
   if (verbose) cliArgs.push('--verbose');
 
-  let output = '';
   let stderrOutput = '';
   const child = spawn('node', cliArgs, {
     cwd: resolve(rootDir, 'cli'),
-    stdio: ['inherit', 'pipe', 'pipe'],
+    stdio: ['inherit', 'inherit', 'pipe'],
     env: {
       ...process.env,
       TS_NODE_PROJECT: resolve(rootDir, 'cli', 'tsconfig.json'),
@@ -194,34 +198,26 @@ async function main() {
       // Hide ExperimentalWarning/DeprecationWarning noise (ts-node loader, Node internals)
       // by default; --verbose re-enables the full raw output for troubleshooting.
       ...(verbose ? {} : { NODE_NO_WARNINGS: '1' }),
+      // deploy.ts writes its machine-readable result here instead of stdout, so parsing
+      // doesn't depend on scraping a magic line out of otherwise free-form CLI output.
+      DEPLOYMENT_RESULT_FILE: resultFile,
     },
   });
 
-  child.stdout.on('data', (chunk) => {
-    process.stdout.write(chunk);
-    output += chunk.toString();
-  });
-
   child.stderr.on('data', (chunk) => {
-    if (verbose) {
-      process.stderr.write(chunk);
-    } else {
-      stderrOutput += chunk.toString();
-    }
+    process.stderr.write(chunk);
+    if (!verbose) stderrOutput += chunk.toString();
   });
 
   child.on('exit', (code) => {
-    if (code === 0) {
-      const match = output.match(/^DEPLOYMENT_RESULT (.+)$/m);
-      if (match) {
-        try {
-          const result = JSON.parse(match[1]);
-          saveDeploymentArtifacts(result);
-        } catch (e) {
-          fmt.warn(`Could not parse deployment result: ${e.message}`);
-        }
+    if (code === 0 && existsSync(resultFile)) {
+      try {
+        const result = JSON.parse(readFileSync(resultFile, 'utf-8'));
+        saveDeploymentArtifacts(result);
+      } catch (e) {
+        fmt.warn(`Could not parse deployment result: ${e.message}`);
       }
-    } else {
+    } else if (code !== 0) {
       if (!verbose && stderrOutput.trim()) {
         console.error('');
         fmt.fail('Deployment failed.');
@@ -230,6 +226,7 @@ async function main() {
         console.error('');
       }
     }
+    rmSync(resultDir, { recursive: true, force: true });
     process.exit(code ?? 1);
   });
 }

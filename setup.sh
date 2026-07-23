@@ -31,8 +31,24 @@ warn() { printf "${YELLOW}⚠${RESET} %s\n" "$1"; }
 err()  { printf "${RED}✘${RESET} %s\n" "$1"; }
 step() { printf "\n${BOLD}%s${RESET}\n" "$1"; }
 
+# Print the failing message(s) then exit 1, always pointing at `npm run doctor` as the
+# general-purpose next step for diagnosing whatever's still broken.
+die() {
+  for msg in "$@"; do err "$msg"; done
+  err "Once fixed, you can also run 'npm run doctor' to check everything at once."
+  exit 1
+}
+
 REQUIRED_NODE_MAJOR=24
 TOTAL_STEPS=9
+
+# --- 0/9: Baseline tooling (git, curl) --------------------------------------
+if ! command -v git >/dev/null 2>&1; then
+  die "git is required but was not found on PATH." "Install it: https://git-scm.com/downloads"
+fi
+if ! command -v curl >/dev/null 2>&1; then
+  die "curl is required but was not found on PATH." "Install it via your OS package manager (e.g. apt install curl, brew install curl)."
+fi
 
 # --- 1/9: Detect OS --------------------------------------------------------
 step "1/${TOTAL_STEPS} Detecting operating system"
@@ -52,10 +68,10 @@ case "$(uname -s)" in
 esac
 
 if [ "$OS_KIND" = "windows-native" ]; then
-  err "Running under native Windows bash (Git Bash/MSYS). This repo's tooling (Docker Compose"
-  err "healthchecks, Compact installer) targets Linux/macOS. Install WSL2 and re-run this script"
-  err "from inside a WSL2 distro: https://learn.microsoft.com/windows/wsl/install"
-  exit 1
+  die \
+    "Running under native Windows bash (Git Bash/MSYS). This repo's tooling (Docker Compose" \
+    "healthchecks, Compact installer) targets Linux/macOS. Install WSL2 and re-run this script" \
+    "from inside a WSL2 distro: https://learn.microsoft.com/windows/wsl/install"
 fi
 ok "Detected OS: ${OS_KIND}$( [ "$OS_KIND" = "wsl" ] && echo ' (Windows via WSL2)' )"
 
@@ -73,28 +89,50 @@ fi
 step "2/${TOTAL_STEPS} Checking prerequisites"
 
 # --- Node.js -----------------------------------------------------------
+# Check the usual nvm locations (default install, Homebrew on macOS, XDG-style) plus
+# common alternative version managers, in case NVM_DIR isn't set in this shell.
+find_nvm_sh() {
+  for candidate in \
+    "${NVM_DIR:-}/nvm.sh" \
+    "$HOME/.nvm/nvm.sh" \
+    "/usr/local/opt/nvm/nvm.sh" \
+    "/opt/homebrew/opt/nvm/nvm.sh" \
+    "${XDG_CONFIG_HOME:-$HOME/.config}/nvm/nvm.sh"
+  do
+    [ -n "$candidate" ] && [ -s "$candidate" ] && { echo "$candidate"; return 0; }
+  done
+  return 1
+}
+
 if command -v node >/dev/null 2>&1; then
   NODE_VERSION="$(node --version | tr -d 'v')"
   NODE_MAJOR="${NODE_VERSION%%.*}"
   if [ "$NODE_MAJOR" -lt "$REQUIRED_NODE_MAJOR" ]; then
     err "Node.js >= ${REQUIRED_NODE_MAJOR} required, found $NODE_VERSION."
-    if [ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]; then
-      warn "nvm detected — attempting to install/use Node ${REQUIRED_NODE_MAJOR}..."
+    NVM_SH="$(find_nvm_sh || true)"
+    if [ -n "$NVM_SH" ]; then
+      warn "nvm detected (${NVM_SH}) — attempting to install/use Node ${REQUIRED_NODE_MAJOR}..."
       # shellcheck disable=SC1090
-      . "${NVM_DIR:-$HOME/.nvm}/nvm.sh"
+      . "$NVM_SH"
       nvm install "$REQUIRED_NODE_MAJOR" >/dev/null
       nvm use "$REQUIRED_NODE_MAJOR" >/dev/null
       ok "Now using Node.js $(node --version)"
+    elif command -v fnm >/dev/null 2>&1; then
+      warn "fnm detected — attempting to install/use Node ${REQUIRED_NODE_MAJOR}..."
+      fnm install "$REQUIRED_NODE_MAJOR" && eval "$(fnm env)" && fnm use "$REQUIRED_NODE_MAJOR"
+      ok "Now using Node.js $(node --version)"
+    elif command -v volta >/dev/null 2>&1; then
+      warn "volta detected — attempting to pin Node ${REQUIRED_NODE_MAJOR}..."
+      volta install "node@${REQUIRED_NODE_MAJOR}"
+      ok "Now using Node.js $(node --version)"
     else
-      err "Install Node.js >= ${REQUIRED_NODE_MAJOR} (https://nodejs.org) or nvm, then re-run ./setup.sh"
-      exit 1
+      die "Install Node.js >= ${REQUIRED_NODE_MAJOR} (https://nodejs.org), nvm, fnm, or volta, then re-run ./setup.sh"
     fi
   else
     ok "Node.js $NODE_VERSION"
   fi
 else
-  err "Node.js not found. Install Node.js >= ${REQUIRED_NODE_MAJOR} from https://nodejs.org, then re-run ./setup.sh"
-  exit 1
+  die "Node.js not found. Install Node.js >= ${REQUIRED_NODE_MAJOR} from https://nodejs.org, then re-run ./setup.sh"
 fi
 
 # --- Docker --------------------------------------------------------------
@@ -119,6 +157,7 @@ install_docker_guided() {
       err "See https://docs.docker.com/get-docker/ for install instructions."
       ;;
   esac
+  err "Once fixed, you can also run 'npm run doctor' to check everything at once."
   exit 1
 }
 
@@ -128,8 +167,15 @@ if ! command -v docker >/dev/null 2>&1; then
     warn "Attempting automatic install via Docker's official convenience script (requires sudo)..."
     if curl -fsSL https://get.docker.com | sudo sh; then
       sudo usermod -aG docker "$USER" 2>/dev/null || true
-      warn "Docker installed. You may need to log out/in (or run 'newgrp docker') for group"
-      warn "membership to take effect before Docker works without sudo."
+      # Group membership only takes effect in new sessions. Re-exec the rest of this script
+      # under the new group via `sg` so the user doesn't have to log out/in and re-run by hand.
+      if command -v sg >/dev/null 2>&1 && ! docker info >/dev/null 2>&1; then
+        warn "Added $USER to the docker group. Re-launching setup under that group (no logout needed)..."
+        exec sg docker -c "$0 $*"
+      else
+        warn "Docker installed. Added $USER to the docker group — log out/in (or run 'newgrp docker')"
+        warn "for it to take effect if 'docker info' below still fails."
+      fi
     else
       install_docker_guided
     fi
@@ -144,23 +190,35 @@ fi
 ok "Docker CLI found ($(docker --version))"
 
 if ! docker info >/dev/null 2>&1; then
-  err "Docker CLI is installed but the daemon is not running/reachable."
   case "$OS_KIND" in
-    macos)   err "Start Docker Desktop (open -a Docker), wait for it to finish starting, then re-run." ;;
-    wsl)     err "Start Docker Desktop on Windows and ensure WSL2 integration is enabled, then re-run." ;;
-    linux)   err "Start the daemon: sudo systemctl start docker (and 'sudo systemctl enable docker' to persist), then re-run." ;;
-    *)       err "Start the Docker daemon for your platform, then re-run." ;;
+    macos)   die "Docker CLI is installed but the daemon is not running/reachable." "Start Docker Desktop (open -a Docker), wait for it to finish starting, then re-run." ;;
+    wsl)     die "Docker CLI is installed but the daemon is not running/reachable." "Start Docker Desktop on Windows and ensure WSL2 integration is enabled, then re-run." ;;
+    linux)   die "Docker CLI is installed but the daemon is not running/reachable." "Start the daemon: sudo systemctl start docker (and 'sudo systemctl enable docker' to persist), then re-run." ;;
+    *)       die "Docker CLI is installed but the daemon is not running/reachable." "Start the Docker daemon for your platform, then re-run." ;;
   esac
-  exit 1
 fi
 ok "Docker daemon is running"
+
+# Docker Desktop on macOS/Windows defaults to a VM with limited memory, which is too little
+# for node + indexer + proof-server (+ web) running together. Warn, don't block — some setups
+# report memory info differently and a false negative shouldn't stop the whole script.
+DOCKER_MEM_MB="$(docker info --format '{{.MemTotal}}' 2>/dev/null | awk '{printf "%d", $1/1024/1024}')"
+RECOMMENDED_MEM_MB=4096
+if [ -n "$DOCKER_MEM_MB" ] && [ "$DOCKER_MEM_MB" -gt 0 ] 2>/dev/null; then
+  if [ "$DOCKER_MEM_MB" -lt "$RECOMMENDED_MEM_MB" ]; then
+    warn "Docker has ${DOCKER_MEM_MB}MB of memory allocated; ${RECOMMENDED_MEM_MB}MB+ is recommended for"
+    warn "node + indexer + proof-server. On Docker Desktop: Settings → Resources → Memory."
+  else
+    ok "Docker memory allocation: ${DOCKER_MEM_MB}MB"
+  fi
+fi
 
 if docker compose version >/dev/null 2>&1; then
   ok "Docker Compose plugin found"
 else
-  err "Docker Compose v2 plugin not found. Update Docker to a version that bundles 'docker compose'"
-  err "(Docker Desktop includes it; on Linux install the 'docker-compose-plugin' package)."
-  exit 1
+  die \
+    "Docker Compose v2 plugin not found. Update Docker to a version that bundles 'docker compose'" \
+    "(Docker Desktop includes it; on Linux install the 'docker-compose-plugin' package)."
 fi
 
 # --- Compact toolchain -----------------------------------------------------
@@ -171,8 +229,7 @@ if ! command -v compact >/dev/null 2>&1; then
     export PATH="$HOME/.local/bin:$PATH"
   fi
   if ! command -v compact >/dev/null 2>&1; then
-    err "Automatic install failed. Install manually: https://docs.midnight.network/develop/tutorial/using/compact"
-    exit 1
+    die "Automatic install failed. Install manually: https://docs.midnight.network/develop/tutorial/using/compact"
   fi
 fi
 ok "Compact CLI $(compact --version 2>/dev/null | tail -n1)"
@@ -213,6 +270,15 @@ else
 fi
 
 step "7/${TOTAL_STEPS} Pulling Docker images and starting the local dev stack (node, indexer, proof-server)"
+if [ ! -f "docker/.env" ] || ! grep -q '^INDEXER_SECRET=.\+' "docker/.env" 2>/dev/null; then
+  # 32 random bytes hex-encoded — dev-only secret to satisfy the indexer's config schema,
+  # unique per machine instead of the fixed value every clone of this repo used to share.
+  printf 'INDEXER_SECRET=%s\n' "$(openssl rand -hex 32 2>/dev/null || node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("hex"))')" > docker/.env
+  ok "Generated docker/.env with a unique dev secret for the indexer"
+else
+  ok "docker/.env already exists (left untouched)"
+fi
+
 warn "Pulling images (this can take a while on first run)..."
 docker compose -f docker/docker-compose.yml pull node indexer proof-server
 ok "Docker images pulled"
@@ -244,7 +310,7 @@ wait_for() {
   ok "${name} reachable at ${url} (HTTP ${code})"
 }
 
-wait_for "node" "http://localhost:9944/health" 1 || exit 1
+wait_for "node" "http://localhost:9944/health" 1 || die "Node did not become healthy — see log command above."
 wait_for "indexer" "http://localhost:8088" 0 || warn "Indexer not yet reachable — it may still be catching up; check 'docker compose -f docker/docker-compose.yml ps'"
 
 if curl -sf "http://localhost:6300" >/dev/null 2>&1 || nc -z localhost 6300 >/dev/null 2>&1; then
@@ -254,10 +320,7 @@ else
 fi
 
 step "9/${TOTAL_STEPS} Running full health checks"
-npm run doctor || {
-  err "Some checks failed — see above. Fix them, then re-run: npm run doctor"
-  exit 1
-}
+npm run doctor || die "Some checks failed — see above. Fix them, then re-run: npm run doctor"
 
 printf "\n${GREEN}${BOLD}✅ Setup complete — ready for development${RESET}\n\n"
 cat <<EOF

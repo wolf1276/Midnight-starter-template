@@ -2,9 +2,10 @@
 // Health-check for the Midnight bboard dev environment.
 // Run: npm run doctor
 import { execSync } from 'node:child_process';
-import { existsSync, accessSync, constants } from 'node:fs';
+import { existsSync, accessSync, constants, readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { versions } from './lib/versions.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, '..');
@@ -170,6 +171,30 @@ check('Git hooks installed', () => {
   const hook = resolve(rootDir, '.git', 'hooks', 'pre-commit');
   if (!existsSync(hook)) throw new Error("missing — run './setup.sh' to install");
   return 'installed';
+});
+
+check('Indexer dev secret configured', () => {
+  const envFile = resolve(rootDir, 'docker', '.env');
+  if (!existsSync(envFile) || !/^INDEXER_SECRET=.+$/m.test(readFileSync(envFile, 'utf-8'))) {
+    throw new Error("missing — run './setup.sh' to generate docker/.env");
+  }
+  return 'present';
+});
+
+check('Pinned image versions match config/versions.json', () => {
+  const compose = readFileSync(resolve(rootDir, 'docker', 'docker-compose.yml'), 'utf-8');
+  const cliProofServer = readFileSync(resolve(rootDir, 'cli', 'proof-server.yml'), 'utf-8');
+  const mismatches = [];
+  for (const [file, text, expected] of [
+    ['docker/docker-compose.yml', compose, versions.midnightNodeImage],
+    ['docker/docker-compose.yml', compose, versions.indexerImage],
+    ['docker/docker-compose.yml', compose, versions.proofServerImage],
+    ['cli/proof-server.yml', cliProofServer, versions.proofServerImage],
+  ]) {
+    if (!text.includes(expected)) mismatches.push(`${file} does not reference ${expected}`);
+  }
+  if (mismatches.length) throw new Error(`out of sync with config/versions.json: ${mismatches.join('; ')}`);
+  return 'in sync';
 });
 
 console.log('\nMidnight bboard — environment health check\n');

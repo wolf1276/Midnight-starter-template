@@ -233,13 +233,14 @@ export const run = async (config: Config, testEnv: TestEnvironment, logger: Logg
     }
 
     const zkConfigProvider = new NodeZkConfigProvider<'post' | 'takeDown'>(config.zkConfigPath);
+    // Generated once per run and only ever kept in memory — this store is scratch space for a
+    // single session, never reopened across processes, so there's nothing to persist.
+    const storagePassword = `${toHex(randomBytes(24))}-${Date.now()}`;
     const providers: BBoardProviders = {
       privateStateProvider: levelPrivateStateProvider<PrivateStateId, BBoardPrivateState>({
         privateStateStoreName: config.privateStateStoreName,
         signingKeyStoreName: `${config.privateStateStoreName}-signing-keys`,
-        privateStoragePasswordProvider: () => {
-          return 'Bboard-Test-2026!';
-        },
+        privateStoragePasswordProvider: () => storagePassword,
         accountId: seed,
       }),
       publicDataProvider: indexerPublicDataProvider(envConfiguration.indexer, envConfiguration.indexerWS),

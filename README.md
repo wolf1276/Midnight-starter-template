@@ -184,6 +184,8 @@ npm run contracts:deploy -- --network preview --verbose
 
 ## Documentation
 
+- [What Is Midnight?](docs/WHAT_IS_MIDNIGHT.md) — start here if you're new to Midnight,
+  Compact, or zero-knowledge proofs
 - [Architecture](docs/ARCHITECTURE.md) — project structure, data flow, implementation notes
 - [Docker](docs/DOCKER.md) — full Docker stack and production image
 - [Environment Variables](docs/ENVIRONMENT.md) — `web/.env.local` reference
