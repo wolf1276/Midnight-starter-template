@@ -61,6 +61,8 @@ jobs:
 
       - name: Compile web
         working-directory: web
+        env:
+          NEXT_PUBLIC_NETWORK_ID: preprod
         run: |
           npm run ci
 
