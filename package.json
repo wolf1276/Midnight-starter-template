@@ -76,7 +76,7 @@
     "eslint-plugin-react": "^7.37.5",
     "http-server": "^14.1.1",
     "patch-package": "^8.0.1",
-    "prettier": "^3.8.4",
+    "prettier": "^3.9.5",
     "rollup": "^4.62.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
