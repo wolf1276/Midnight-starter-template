@@ -1,0 +1,46 @@
+{
+  "name": "create-midnight",
+  "version": "0.1.0",
+  "description": "Scaffold a production-ready Midnight DApp in seconds.",
+  "keywords": ["midnight", "create-midnight", "scaffold", "cli", "dapp", "zk", "blockchain"],
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "bin": {
+    "create-midnight": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "templates"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx src/cli.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.9.1",
+    "commander": "^12.1.0",
+    "log-symbols": "^7.0.0",
+    "ora": "^8.1.1",
+    "picocolors": "^1.1.1",
+    "tar": "^7.4.3",
+    "validate-npm-package-name": "^5.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/validate-npm-package-name": "^4.0.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wolf1276/Midnight-starter-template.git"
+  },
+  "homepage": "https://github.com/wolf1276/Midnight-starter-template#readme"
+}
