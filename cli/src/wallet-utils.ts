@@ -28,7 +28,7 @@ export const getInitialShieldedState = async (
   logger: Logger,
   wallet: ShieldedWalletAPI,
 ): Promise<ShieldedWalletState> => {
-  logger.info('Getting initial state of wallet...');
+  logger.debug('Getting initial state of wallet...');
   return Rx.firstValueFrom(wallet.state);
 };
 
@@ -36,7 +36,7 @@ export const getInitialUnshieldedState = async (
   logger: Logger,
   wallet: UnshieldedWalletAPI,
 ): Promise<UnshieldedWalletState> => {
-  logger.info('Getting initial state of wallet...');
+  logger.debug('Getting initial state of wallet...');
   return Rx.firstValueFrom(wallet.state);
 };
 
@@ -57,7 +57,7 @@ const isFacadeStateSynced = (state: FacadeState): boolean =>
   isProgressStrictlyComplete(state.unshielded.progress);
 
 export const syncWallet = (logger: Logger, wallet: WalletFacade, throttleTime = 2_000) => {
-  logger.info('Syncing wallet...');
+  logger.debug('Syncing wallet...');
 
   return Rx.firstValueFrom(
     wallet.state().pipe(
@@ -81,19 +81,33 @@ export const syncWallet = (logger: Logger, wallet: WalletFacade, throttleTime = 
         );
       }),
       Rx.filter((state: FacadeState) => isFacadeStateSynced(state)),
-      Rx.tap(() => logger.info('Sync complete')),
+      Rx.tap(() => logger.debug('Sync complete')),
       Rx.tap((state: FacadeState) => {
         const shieldedBalances = state.shielded.balances || {};
         const unshieldedBalances = state.unshielded.balances || {};
         const dustBalances = state.dust.balance(new Date(Date.now())) || 0n;
 
-        logger.info(
+        logger.debug(
           `Wallet balances after sync - Shielded: ${JSON.stringify(shieldedBalances)}, Unshielded: ${JSON.stringify(unshieldedBalances)}, Dust: ${dustBalances}`,
         );
       }),
     ),
   );
 };
+
+export const getUnshieldedAddress = async (logger: Logger, wallet: WalletFacade): Promise<string> => {
+  const initialState = await getInitialUnshieldedState(logger, wallet.unshielded);
+  return UnshieldedAddress.codec.encode(getNetworkId(), initialState.address).toString();
+};
+
+export class FundingTimeoutError extends Error {}
+
+export interface WaitForFundsOptions {
+  /** Called with the latest known unshielded balance while waiting. */
+  onBalance?: (balance: bigint) => void;
+  /** If set, reject with FundingTimeoutError instead of waiting forever. */
+  timeoutMs?: number;
+}
 
 export const waitForUnshieldedFunds = async (
   logger: Logger,
@@ -102,43 +116,55 @@ export const waitForUnshieldedFunds = async (
   tokenType: UnshieldedTokenType,
   fundFromFaucet = false,
   throttleTime = 2_000,
+  opts?: WaitForFundsOptions,
 ): Promise<UnshieldedWalletState> => {
   const initialState = await getInitialUnshieldedState(logger, wallet.unshielded);
   const unshieldedAddress = UnshieldedAddress.codec.encode(getNetworkId(), initialState.address);
-  logger.info(`Using unshielded address: ${unshieldedAddress.toString()} waiting for funds...`);
+  logger.debug(`Using unshielded address: ${unshieldedAddress.toString()} waiting for funds...`);
   if (fundFromFaucet && env.faucet) {
-    logger.info('Requesting tokens from faucet...');
+    logger.debug('Requesting tokens from faucet...');
     await new FaucetClient(env.faucet, logger).requestTokens(unshieldedAddress.toString());
   }
   const initialBalance = initialState.balances[tokenType.raw];
   if (initialBalance === undefined || initialBalance === 0n) {
-    logger.info(`Your wallet initial balance is: 0 (not yet initialized)`);
-    logger.info(`Waiting to receive tokens...`);
-    return Rx.firstValueFrom(
-      wallet.state().pipe(
-        Rx.tap((state: FacadeState) => {
-          const balance = state.unshielded.balances[tokenType.raw] ?? 0n;
-          logger.debug(
-            `Wallet funds state emission: { synced=${isFacadeStateSynced(state)}, balance=${balance.toString()} }`,
-          );
-        }),
-        Rx.throttleTime(throttleTime),
-        Rx.filter(
-          (state: FacadeState) => isFacadeStateSynced(state) && (state.unshielded.balances[tokenType.raw] ?? 0n) > 0n,
-        ),
-        Rx.tap(() => logger.info('Sync complete')),
-        Rx.tap((state: FacadeState) => {
-          const shieldedBalances = state.shielded.balances || {};
-          const unshieldedBalances = state.unshielded.balances || {};
-          const dustBalances = state.dust.balance(new Date(Date.now())) || 0n;
-
-          logger.info(
-            `Wallet balances after sync - Shielded: ${JSON.stringify(shieldedBalances)}, Unshielded: ${JSON.stringify(unshieldedBalances)}, Dust: ${dustBalances}`,
-          );
-        }),
-        Rx.map((state: FacadeState) => state.unshielded),
+    logger.debug(`Your wallet initial balance is: 0 (not yet initialized)`);
+    logger.debug(`Waiting to receive tokens...`);
+    opts?.onBalance?.(0n);
+    let obs$ = wallet.state().pipe(
+      Rx.tap((state: FacadeState) => {
+        const balance = state.unshielded.balances[tokenType.raw] ?? 0n;
+        opts?.onBalance?.(balance);
+        logger.debug(
+          `Wallet funds state emission: { synced=${isFacadeStateSynced(state)}, balance=${balance.toString()} }`,
+        );
+      }),
+      Rx.throttleTime(throttleTime),
+      Rx.filter(
+        (state: FacadeState) => isFacadeStateSynced(state) && (state.unshielded.balances[tokenType.raw] ?? 0n) > 0n,
       ),
+      Rx.tap(() => logger.debug('Sync complete')),
+      Rx.tap((state: FacadeState) => {
+        const shieldedBalances = state.shielded.balances || {};
+        const unshieldedBalances = state.unshielded.balances || {};
+        const dustBalances = state.dust.balance(new Date(Date.now())) || 0n;
+
+        logger.debug(
+          `Wallet balances after sync - Shielded: ${JSON.stringify(shieldedBalances)}, Unshielded: ${JSON.stringify(unshieldedBalances)}, Dust: ${dustBalances}`,
+        );
+      }),
+      Rx.map((state: FacadeState) => state.unshielded),
     );
+    if (opts?.timeoutMs !== undefined) {
+      obs$ = obs$.pipe(Rx.timeout(opts.timeoutMs));
+    }
+    try {
+      return await Rx.firstValueFrom(obs$);
+    } catch (e) {
+      if (e instanceof Rx.TimeoutError) {
+        throw new FundingTimeoutError(`Timed out after ${opts?.timeoutMs}ms waiting for funds`);
+      }
+      throw e;
+    }
   }
   return initialState;
 };

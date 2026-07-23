@@ -86,7 +86,7 @@ export class MidnightWalletProvider implements MidnightProvider, WalletProvider 
 
   // We do not wait for funds here; the CLI flow handles it explicitly.
   async start(): Promise<void> {
-    this.logger.info('Starting wallet...');
+    this.logger.debug('Starting wallet...');
     await this.wallet.start(this.zswapSecretKeys, this.dustSecretKey);
   }
 
@@ -111,8 +111,8 @@ export class MidnightWalletProvider implements MidnightProvider, WalletProvider 
     };
 
     const initialState = await getInitialShieldedState(logger, wallet.shielded);
-    logger.info(
-      `Your wallet seed is: ${seeds.masterSeed} and your address is: ${initialState.address.coinPublicKeyString()}`,
+    logger.debug(
+      `Wallet seed: ${seeds.masterSeed}, address: ${initialState.address.coinPublicKeyString()}`,
     );
 
     return new MidnightWalletProvider(

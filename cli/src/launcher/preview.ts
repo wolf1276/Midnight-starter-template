@@ -18,6 +18,6 @@ import { run } from '../index.js';
 import { PreviewRemoteConfig } from '../config.js';
 
 const config = new PreviewRemoteConfig();
-const logger = await createLogger(config.logDir);
+const logger = await createLogger(config.logDir, false);
 const testEnvironment = config.getEnvironment(logger);
 await run(config, testEnvironment, logger);

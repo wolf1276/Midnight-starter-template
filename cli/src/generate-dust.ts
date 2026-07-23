@@ -52,11 +52,11 @@ export const generateDust = async (
   const utxos = unshieldedState.availableCoins.filter((coin) => !coin.meta.registeredForDustGeneration);
 
   if (utxos.length === 0) {
-    logger.info('No unregistered UTXOs found for dust generation.');
+    logger.debug('No unregistered UTXOs found for dust generation.');
     return;
   }
 
-  logger.info(`Generating dust with ${utxos.length} UTXOs...`);
+  logger.debug(`Generating dust with ${utxos.length} UTXOs...`);
 
   const recipe = await walletFacade.registerNightUtxosForDustGeneration(
     utxos,
@@ -73,8 +73,8 @@ export const generateDust = async (
       rx.map((s) => s.dust.balance(new Date())),
     ),
   );
-  logger.info(`Dust generation transaction submitted with txId: ${txId}`);
-  logger.info(`Receiver dust balance after generation: ${dustBalance}`);
+  logger.debug(`Dust generation transaction submitted with txId: ${txId}`);
+  logger.debug(`Receiver dust balance after generation: ${dustBalance}`);
 
   return txId;
 };

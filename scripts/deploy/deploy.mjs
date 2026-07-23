@@ -7,8 +7,39 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, '..', '..');
 
+// --- Terminal formatting helpers (no deps, matches cli/src/ui.ts) ---
+const isTTY = process.stdout.isTTY && !process.env.NO_COLOR;
+const c = (code) => (s) => (isTTY ? `\x1b[${code}m${s}\x1b[0m` : s);
+const dim = c('2');
+const bold = c('1');
+const green = c('32');
+const red = c('31');
+const yellow = c('33');
+const cyan = c('36');
+const RULE = dim('\u2501'.repeat(36));
+
+const fmt = {
+  ok: (msg) => console.log(`  ${green('\u2713')} ${msg}`),
+  fail: (msg) => console.error(`  ${red('\u2717')} ${msg}`),
+  warn: (msg) => console.log(`  ${yellow('\u26A0')} ${msg}`),
+  section: (title) => {
+    console.log(`\n${RULE}`);
+    console.log(`  ${bold(title)}`);
+    console.log(`${RULE}`);
+  },
+  info: (msg) => console.log(`  ${dim(msg)}`),
+  cmd: (msg) => console.log(`    ${cyan(msg)}`),
+  dim,
+  bold,
+  green,
+  red,
+  yellow,
+  cyan,
+};
+
 const args = process.argv.slice(2);
 let network = 'preview';
+const verbose = args.includes('--verbose') || args.includes('--debug');
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--network' && i + 1 < args.length) {
     network = args[i + 1];
@@ -19,11 +50,18 @@ for (let i = 0; i < args.length; i++) {
 }
 
 if (!['preview', 'preprod'].includes(network)) {
-  console.error(`Error: Unsupported network '${network}'. Use 'preview' or 'preprod'.`);
+  fmt.fail(`Unsupported network '${network}'. Use 'preview' or 'preprod'.`);
   process.exit(1);
 }
 
+let deployStart = Date.now();
+
 async function main() {
+  deployStart = Date.now();
+
+  fmt.section(`\u{1F680} Midnight Contract Deployment`);
+  fmt.info(`Network: ${network}`);
+
   const requiredNodeMajor = 24;
   const nodeVersion = process.version.slice(1);
   const [nodeMajor] = nodeVersion.split('.').map(Number);
@@ -41,33 +79,41 @@ async function main() {
         }
       } catch {}
     }
-    console.error(`Error: Node.js >= ${requiredNodeMajor}.x required (current: ${nodeVersion}).`);
-    console.error(`Run: nvm install ${requiredNodeMajor} && nvm use ${requiredNodeMajor}`);
-    console.error(`Or install from https://nodejs.org/`);
+    fmt.fail(`Node.js >= ${requiredNodeMajor}.x required (current: ${nodeVersion}).`);
+    fmt.info('Install via nvm:');
+    fmt.cmd(`nvm install ${requiredNodeMajor} && nvm use ${requiredNodeMajor}`);
+    fmt.info('Or download from:');
+    fmt.cmd('https://nodejs.org/');
     process.exit(1);
   }
-  console.log(`✓ Node.js ${nodeVersion}`);
+  fmt.ok(`Node.js ${nodeVersion}`);
 
   const rootNodeModules = resolve(rootDir, 'node_modules');
   if (!existsSync(rootNodeModules)) {
-    console.error("✗ Dependencies not installed. Run 'npm install' (from contracts/ or the repo root), then retry.");
+    fmt.fail("Dependencies not installed.");
+    fmt.info("Run:");
+    fmt.cmd("npm install");
     process.exit(1);
   }
-  console.log('✓ Dependencies installed');
+  fmt.ok('Dependencies installed');
 
   try {
     execSync('docker info > /dev/null 2>&1', { shell: true });
-    console.log('✓ Docker is running');
+    fmt.ok('Docker is running');
   } catch {
-    console.error('✗ Docker is not running. Install Docker Desktop (or start the Docker daemon) and start it, then retry.');
+    fmt.fail('Docker is not running.');
+    fmt.info('Install Docker Desktop (or start the Docker daemon) and start it, then retry.');
+    fmt.info('  https://docs.docker.com/get-docker/');
     process.exit(1);
   }
 
   try {
     execSync('compact --version > /dev/null 2>&1', { shell: true });
-    console.log('✓ Compact compiler found');
+    fmt.ok('Compact compiler found');
   } catch {
-    console.error('✗ Compact compiler not found. Install the Midnight Compact toolchain: https://docs.midnight.network/relnotes/compact-toolchain');
+    fmt.fail('Compact compiler not found.');
+    fmt.info('Install the Midnight Compact toolchain:');
+    fmt.cmd('curl --proto \'=https\' --tlsv1.2 -sSf https://raw.githubusercontent.com/midnightntwrk/compact/main/install.sh | sh');
     process.exit(1);
   }
 
@@ -75,80 +121,93 @@ async function main() {
     const out = execSync('compact list', { encoding: 'utf-8', shell: true });
     const active = out.split('\n').find((l) => l.includes('→') || l.includes('*'));
     if (!active) throw new Error('no active toolchain');
-    console.log(`✓ Compact toolchain active — ${active.trim()}`);
+    fmt.ok(`Compact toolchain active — ${active.trim()}`);
   } catch {
-    console.error("✗ No active Compact toolchain. Run 'compact update' to install one, then retry.");
+    fmt.fail('No active Compact toolchain.');
+    fmt.info("Install one via:");
+    fmt.cmd('compact update');
     process.exit(1);
   }
 
   const cliPackageDir = resolve(rootDir, 'cli');
   if (!existsSync(resolve(cliPackageDir, 'package.json')) || !existsSync(resolve(cliPackageDir, 'node_modules'))) {
-    console.error(
-      "✗ Midnight CLI workspace (cli/) is missing or its dependencies aren't installed. Run 'npm install' from the repo root, then retry.",
-    );
+    fmt.fail("CLI workspace (cli/) missing or dependencies not installed.");
+    fmt.info("Run from repo root:");
+    fmt.cmd('npm install');
     process.exit(1);
   }
-  console.log('✓ Midnight CLI workspace found');
+  fmt.ok('CLI workspace ready');
 
   const proofServerImage = 'midnightntwrk/proof-server:8.0.3';
   try {
     execSync(`docker image inspect ${proofServerImage} > /dev/null 2>&1 || docker pull ${proofServerImage} > /dev/null 2>&1`, { shell: true });
-    console.log(`✓ Proof Server image available (${proofServerImage})`);
+    fmt.ok('Proof Server image available');
   } catch {
-    console.error(
-      `✗ Could not find or pull the Proof Server image (${proofServerImage}). Check your Docker registry access/network connection, then retry. It will be started automatically as a container during deployment.`,
-    );
+    fmt.fail('Could not find or pull the Proof Server image.');
+    fmt.info(`Image: ${proofServerImage}`);
+    fmt.info('Check your Docker registry access and network connection, then retry.');
+    fmt.info('The proof server will be started automatically as a container during deployment.');
     process.exit(1);
   }
 
   const managedDir = resolve(rootDir, 'contracts', 'src', 'managed', 'bboard', 'contract');
   if (!existsSync(managedDir)) {
-    console.log('\nBuilding contract...');
+    fmt.info('\nBuilding contract...');
     execSync('npm run build:contract', { cwd: rootDir, stdio: 'inherit', shell: true });
-    console.log('✓ Contract built');
+    fmt.ok('Contract built');
   } else {
-    console.log('✓ Contract already compiled');
+    fmt.ok('Contract already compiled');
   }
 
   const cliDistDir = resolve(rootDir, 'cli', 'dist');
   const cliLauncherDir = resolve(rootDir, 'cli', 'dist', 'launcher');
   if (!existsSync(cliDistDir) || !existsSync(cliLauncherDir)) {
-    console.log('\nBuilding CLI...');
+    fmt.info('Building CLI...');
     execSync('npm run build:cli', { cwd: rootDir, stdio: 'inherit', shell: true });
-    console.log('✓ CLI built');
+    fmt.ok('CLI built');
   } else {
-    console.log('✓ CLI already built');
+    fmt.ok('CLI already built');
   }
 
   // Note: the proof server itself is started by RemoteTestEnvironment (testkit-js)
   // inside deploy.ts via scripts/docker/proof-server.yml — no need to start it here too.
 
-  console.log(`\n━━━ Deploying to ${network} ━━━\n`);
+  fmt.section(`\u{1F4E6} Deploying to ${network}`);
+
+  const cliArgs = [
+    '--experimental-specifier-resolution=node',
+    '--loader', 'ts-node/esm',
+    'src/launcher/deploy.ts',
+    network,
+  ];
+  if (verbose) cliArgs.push('--verbose');
 
   let output = '';
-  const child = spawn(
-    'node',
-    [
-      '--experimental-specifier-resolution=node',
-      '--loader', 'ts-node/esm',
-      'src/launcher/deploy.ts',
-      network,
-    ],
-    {
-      cwd: resolve(rootDir, 'cli'),
-      stdio: ['inherit', 'pipe', 'inherit'],
-      shell: true,
-      env: {
-        ...process.env,
-        TS_NODE_PROJECT: resolve(rootDir, 'cli', 'tsconfig.json'),
-        NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --max-old-space-size=4096`.trim(),
-      },
+  let stderrOutput = '';
+  const child = spawn('node', cliArgs, {
+    cwd: resolve(rootDir, 'cli'),
+    stdio: ['inherit', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      TS_NODE_PROJECT: resolve(rootDir, 'cli', 'tsconfig.json'),
+      NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --max-old-space-size=4096`.trim(),
+      // Hide ExperimentalWarning/DeprecationWarning noise (ts-node loader, Node internals)
+      // by default; --verbose re-enables the full raw output for troubleshooting.
+      ...(verbose ? {} : { NODE_NO_WARNINGS: '1' }),
     },
-  );
+  });
 
   child.stdout.on('data', (chunk) => {
     process.stdout.write(chunk);
     output += chunk.toString();
+  });
+
+  child.stderr.on('data', (chunk) => {
+    if (verbose) {
+      process.stderr.write(chunk);
+    } else {
+      stderrOutput += chunk.toString();
+    }
   });
 
   child.on('exit', (code) => {
@@ -159,10 +218,17 @@ async function main() {
           const result = JSON.parse(match[1]);
           saveDeploymentArtifacts(result);
         } catch (e) {
-          console.warn(`\n⚠ Could not parse deployment result: ${e.message}`);
+          fmt.warn(`Could not parse deployment result: ${e.message}`);
         }
       }
-      console.log('\n✓ Deployment complete');
+    } else {
+      if (!verbose && stderrOutput.trim()) {
+        console.error('');
+        fmt.fail('Deployment failed.');
+        fmt.info('Re-run with --verbose for full diagnostic output:');
+        fmt.cmd(`npm run deploy -- --network ${network} --verbose`);
+        console.error('');
+      }
     }
     process.exit(code ?? 1);
   });
@@ -181,7 +247,7 @@ function saveDeploymentArtifacts(result) {
   }
   history.unshift(result);
   writeFileSync(deploymentPath, JSON.stringify(history, null, 2) + '\n');
-  console.log(`✓ Saved deployment record to deployment.json`);
+  fmt.ok('Saved deployment record to deployment.json');
 
   const envLocalPath = resolve(rootDir, 'web', '.env.local');
   if (existsSync(envLocalPath)) {
@@ -191,12 +257,24 @@ function saveDeploymentArtifacts(result) {
       ? env.replace(/^NEXT_PUBLIC_CONTRACT_ADDRESS=.*$/m, line)
       : `${env.trimEnd()}\n\n# Set automatically by npm run contracts:deploy\n${line}\n`;
     writeFileSync(envLocalPath, env);
-    console.log('✓ Updated web/.env.local with NEXT_PUBLIC_CONTRACT_ADDRESS');
+    fmt.ok('Updated web/.env.local with NEXT_PUBLIC_CONTRACT_ADDRESS');
   }
 
-  console.log(`\nNetwork:  ${result.network}`);
-  console.log(`Contract: ${result.contractAddress}`);
-  console.log(`Indexer:  ${result.indexer}  (query this to inspect on-chain contract state)`);
+  const ms = Date.now() - deployStart;
+  const elapsed = ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
+
+  fmt.section(`\u2705 Deployment completed in ${elapsed}`);
+  console.log(`  ${fmt.dim('Network:')}   ${result.network}`);
+  console.log(`  ${fmt.dim('Contract:')}  ${result.contractAddress}`);
+  if (result.explorerUrl) {
+    console.log(`  ${fmt.dim('Explorer:')}  ${result.explorerUrl}`);
+  }
+  console.log(`  ${fmt.dim('Indexer:')}   ${result.indexer}`);
+  console.log('');
+  fmt.info('Next steps:');
+  fmt.cmd('npm run dev                         Start the frontend');
+  fmt.cmd('npm run contracts:deploy -- --network ' + result.network + '  Deploy again');
+  console.log('');
 }
 
 main();

@@ -29,6 +29,8 @@ export interface Config {
   readonly zkConfigPath: string;
   getEnvironment(logger: Logger): TestEnvironment;
   readonly generateDust: boolean;
+  /** Base URL for the block explorer, with {contractAddress} placeholder. */
+  readonly explorerUrl: string;
 }
 
 export const currentDir = path.resolve(new URL(import.meta.url).pathname, '..');
@@ -41,6 +43,7 @@ export class StandaloneConfig implements Config {
   logDir = path.resolve(currentDir, '..', 'logs', 'standalone', `${new Date().toISOString()}.log`);
   zkConfigPath = path.resolve(currentDir, '..', '..', 'contracts', 'src', 'managed', 'bboard');
   generateDust = false;
+  explorerUrl = '';
 }
 
 export class PreviewRemoteConfig implements Config {
@@ -52,6 +55,7 @@ export class PreviewRemoteConfig implements Config {
   logDir = path.resolve(currentDir, '..', 'logs', 'preview-remote', `${new Date().toISOString()}.log`);
   zkConfigPath = path.resolve(currentDir, '..', '..', 'contracts', 'src', 'managed', 'bboard');
   generateDust = true;
+  explorerUrl = 'https://explorer.preview.midnight.network/contract/{contractAddress}';
 }
 
 export class PreprodRemoteConfig implements Config {
@@ -63,6 +67,7 @@ export class PreprodRemoteConfig implements Config {
   logDir = path.resolve(currentDir, '..', 'logs', 'preprod-remote', `${new Date().toISOString()}.log`);
   zkConfigPath = path.resolve(currentDir, '..', '..', 'contracts', 'src', 'managed', 'bboard');
   generateDust = true;
+  explorerUrl = 'https://explorer.preprod.midnight.network/contract/{contractAddress}';
 }
 
 export class PreviewTestEnvironment extends RemoteTestEnvironment {

@@ -19,24 +19,27 @@ import pinoPretty from 'pino-pretty';
 import pino from 'pino';
 import { createWriteStream } from 'node:fs';
 
-export const createLogger = async (logPath: string): Promise<pino.Logger> => {
+/**
+ * Creates a logger that always writes full detail to `logPath`.
+ *
+ * By default (`quiet: true`) nothing is echoed to the terminal — the CLI's
+ * own structured UI (see `ui.ts`) is responsible for what the developer
+ * sees. Pass `quiet: false` (e.g. via `--verbose`/`--debug`) to also pretty-print
+ * every log line to stdout for troubleshooting.
+ */
+export const createLogger = async (logPath: string, quiet = true): Promise<pino.Logger> => {
   await fs.mkdir(path.dirname(logPath), { recursive: true });
-  const pretty: pinoPretty.PrettyStream = pinoPretty({
-    colorize: true,
-    sync: true,
-  });
   const level =
     process.env.DEBUG_LEVEL !== undefined && process.env.DEBUG_LEVEL !== null && process.env.DEBUG_LEVEL !== ''
       ? process.env.DEBUG_LEVEL
       : 'info';
-  return pino(
-    {
-      level,
-      depthLimit: 20,
-    },
-    pino.multistream([
-      { stream: pretty, level },
-      { stream: createWriteStream(logPath), level },
-    ]),
-  );
+  const fileStream = { stream: createWriteStream(logPath), level };
+  if (!quiet) {
+    const pretty: pinoPretty.PrettyStream = pinoPretty({
+      colorize: true,
+      sync: true,
+    });
+    return pino({ level, depthLimit: 20 }, pino.multistream([{ stream: pretty, level }, fileStream]));
+  }
+  return pino({ level, depthLimit: 20 }, pino.multistream([fileStream]));
 };
