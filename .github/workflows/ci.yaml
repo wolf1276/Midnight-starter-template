@@ -43,8 +43,8 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
-      - name: Compile and test contract
-        working-directory: contract
+      - name: Compile and test contracts
+        working-directory: contracts
         run: |
           npm run ci
 
@@ -53,12 +53,12 @@ jobs:
         run: |
           npm run ci
 
-      - name: Compile bboard-cli
-        working-directory: bboard-cli
+      - name: Compile cli
+        working-directory: cli
         run: |
           npm run ci
 
-      - name: Compile bboard-ui
-        working-directory: bboard-ui
+      - name: Compile web
+        working-directory: web
         run: |
           npm run ci

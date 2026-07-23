@@ -13,5 +13,8 @@
     "ci": "npm run typecheck && npm run lint && npm run build",
     "lint": "eslint src",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/bboard-contract": "*"
   }
 }

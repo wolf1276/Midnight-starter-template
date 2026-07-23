@@ -1,0 +1,80 @@
+diff --git a/node_modules/@midnight-ntwrk/testkit-js/dist/index.cjs b/node_modules/@midnight-ntwrk/testkit-js/dist/index.cjs
+index 69ba969..3b05270 100644
+--- a/node_modules/@midnight-ntwrk/testkit-js/dist/index.cjs
++++ b/node_modules/@midnight-ntwrk/testkit-js/dist/index.cjs
+@@ -444,7 +444,7 @@ class FaucetClient {
+      */
+     async health() {
+         const url = buildUrlWithPath(this.faucetUrl, '/api/health');
+-        const response = await axios.get(url, { timeout: 1000 });
++        const response = await axios.get(url, { timeout: 20000 });
+         this.logger.info(`Connected to faucet ${url}: ${JSON.stringify(response.data)}`);
+         return response;
+     }
+@@ -504,7 +504,7 @@ class IndexerClient {
+      */
+     async health() {
+         const url = buildUrlWithPath(this.indexerUrl, '/ready');
+-        const response = await axios.get(url, { timeout: 1000 });
++        const response = await axios.get(url, { timeout: 20000 });
+         this.logger.info(`Connected to indexer ${url}: ${JSON.stringify(response.data)}`);
+         return response;
+     }
+@@ -546,7 +546,7 @@ class NodeClient {
+      */
+     async health() {
+         const url = buildUrlWithPath(this.nodeURL, '/health');
+-        const response = await axios.get(url, { timeout: 1000 });
++        const response = await axios.get(url, { timeout: 20000 });
+         this.logger.info(`Connected to node ${url}: ${JSON.stringify(response.data)}`);
+         return response;
+     }
+@@ -669,7 +669,7 @@ class ProofServerClient {
+      */
+     async health() {
+         const url = buildUrlWithPath(this.proofServer, '/health');
+-        const response = await axios.get(url, { timeout: 1000 });
++        const response = await axios.get(url, { timeout: 20000 });
+         this.logger.info(`Connected to proof server ${url}: ${JSON.stringify(response.data)}`);
+         return response;
+     }
+diff --git a/node_modules/@midnight-ntwrk/testkit-js/dist/index.mjs b/node_modules/@midnight-ntwrk/testkit-js/dist/index.mjs
+index 3ef052d..b583c22 100644
+--- a/node_modules/@midnight-ntwrk/testkit-js/dist/index.mjs
++++ b/node_modules/@midnight-ntwrk/testkit-js/dist/index.mjs
+@@ -423,7 +423,7 @@ class FaucetClient {
+      */
+     async health() {
+         const url = buildUrlWithPath(this.faucetUrl, '/api/health');
+-        const response = await axios.get(url, { timeout: 1000 });
++        const response = await axios.get(url, { timeout: 20000 });
+         this.logger.info(`Connected to faucet ${url}: ${JSON.stringify(response.data)}`);
+         return response;
+     }
+@@ -483,7 +483,7 @@ class IndexerClient {
+      */
+     async health() {
+         const url = buildUrlWithPath(this.indexerUrl, '/ready');
+-        const response = await axios.get(url, { timeout: 1000 });
++        const response = await axios.get(url, { timeout: 20000 });
+         this.logger.info(`Connected to indexer ${url}: ${JSON.stringify(response.data)}`);
+         return response;
+     }
+@@ -525,7 +525,7 @@ class NodeClient {
+      */
+     async health() {
+         const url = buildUrlWithPath(this.nodeURL, '/health');
+-        const response = await axios.get(url, { timeout: 1000 });
++        const response = await axios.get(url, { timeout: 20000 });
+         this.logger.info(`Connected to node ${url}: ${JSON.stringify(response.data)}`);
+         return response;
+     }
+@@ -648,7 +648,7 @@ class ProofServerClient {
+      */
+     async health() {
+         const url = buildUrlWithPath(this.proofServer, '/health');
+-        const response = await axios.get(url, { timeout: 1000 });
++        const response = await axios.get(url, { timeout: 20000 });
+         this.logger.info(`Connected to proof server ${url}: ${JSON.stringify(response.data)}`);
+         return response;
+     }

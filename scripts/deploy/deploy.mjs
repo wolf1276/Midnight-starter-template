@@ -1,0 +1,119 @@
+#!/usr/bin/env node
+import { spawn, execSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const rootDir = resolve(__dirname, '..', '..');
+
+const args = process.argv.slice(2);
+let network = 'preview';
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--network' && i + 1 < args.length) {
+    network = args[i + 1];
+    i++;
+  } else if (args[i].startsWith('--network=')) {
+    network = args[i].split('=')[1];
+  }
+}
+
+if (!['preview', 'preprod'].includes(network)) {
+  console.error(`Error: Unsupported network '${network}'. Use 'preview' or 'preprod'.`);
+  process.exit(1);
+}
+
+async function main() {
+  const requiredNodeMajor = 24;
+  const nodeVersion = process.version.slice(1);
+  const [nodeMajor] = nodeVersion.split('.').map(Number);
+  if (nodeMajor < requiredNodeMajor) {
+    const nvmDir = process.env.NVM_DIR || `${process.env.HOME}/.nvm`;
+    const nvmSh = `${nvmDir}/nvm.sh`;
+    if (existsSync(nvmSh)) {
+      try {
+        const nvmNodePath = execSync(`. ${nvmSh} && nvm which ${requiredNodeMajor}`, { encoding: 'utf-8', shell: true }).trim();
+        if (nvmNodePath && existsSync(nvmNodePath)) {
+          console.log(`Node.js ${nodeVersion} is too old. Re-executing with ${nvmNodePath}...`);
+          const child = spawn(nvmNodePath, process.argv.slice(1), { stdio: 'inherit', cwd: process.cwd(), shell: true });
+          child.on('exit', (code) => process.exit(code ?? 1));
+          return;
+        }
+      } catch {}
+    }
+    console.error(`Error: Node.js >= ${requiredNodeMajor}.x required (current: ${nodeVersion}).`);
+    console.error(`Run: nvm install ${requiredNodeMajor} && nvm use ${requiredNodeMajor}`);
+    console.error(`Or install from https://nodejs.org/`);
+    process.exit(1);
+  }
+  console.log(`✓ Node.js ${nodeVersion}`);
+
+  try {
+    execSync('docker info > /dev/null 2>&1', { shell: true });
+    console.log('✓ Docker is running');
+  } catch {
+    console.error('✗ Docker is not running. Install Docker Desktop and start it, then retry.');
+    process.exit(1);
+  }
+
+  try {
+    execSync('compact --version > /dev/null 2>&1', { shell: true });
+    console.log('✓ Compact compiler found');
+  } catch {
+    console.error('✗ Compact compiler not found. Install the Midnight Compact toolchain (see docs.midnight.network).');
+    process.exit(1);
+  }
+
+  const managedDir = resolve(rootDir, 'contracts', 'src', 'managed', 'bboard', 'contract');
+  if (!existsSync(managedDir)) {
+    console.log('\nBuilding contract...');
+    execSync('npm run build:contract', { cwd: rootDir, stdio: 'inherit', shell: true });
+    console.log('✓ Contract built');
+  } else {
+    console.log('✓ Contract already compiled');
+  }
+
+  const cliDistDir = resolve(rootDir, 'cli', 'dist');
+  const cliLauncherDir = resolve(rootDir, 'cli', 'dist', 'launcher');
+  if (!existsSync(cliDistDir) || !existsSync(cliLauncherDir)) {
+    console.log('\nBuilding CLI...');
+    execSync('npm run build:cli', { cwd: rootDir, stdio: 'inherit', shell: true });
+    console.log('✓ CLI built');
+  } else {
+    console.log('✓ CLI already built');
+  }
+
+  // Note: the proof server itself is started by RemoteTestEnvironment (testkit-js)
+  // inside deploy.ts via scripts/docker/proof-server.yml — no need to start it here too.
+
+  console.log(`\n━━━ Deploying to ${network} ━━━\n`);
+
+  const child = spawn(
+    'node',
+    [
+      '--experimental-specifier-resolution=node',
+      '--loader', 'ts-node/esm',
+      'src/launcher/deploy.ts',
+      network,
+    ],
+    {
+      cwd: resolve(rootDir, 'cli'),
+      stdio: 'inherit',
+      shell: true,
+      env: {
+        ...process.env,
+        TS_NODE_PROJECT: resolve(rootDir, 'cli', 'tsconfig.json'),
+        NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --max-old-space-size=4096`.trim(),
+      },
+    },
+  );
+
+  child.on('exit', (code) => {
+    if (code === 0) {
+      console.log('\n✓ Deployment complete');
+    }
+    process.exit(code ?? 1);
+  });
+}
+
+main();
