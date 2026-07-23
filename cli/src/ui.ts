@@ -110,6 +110,22 @@ export class Step {
 
 export const step = (label: string): Step => new Step(label);
 
+export const isInteractive = isTTY;
+
+/** Overwrite the current terminal line in place (for continuously-updating values like a polled balance). */
+export const liveLine = (text: string): void => {
+  if (isTTY) {
+    realStdoutWrite(`\r\x1b[K${text}`);
+  } else {
+    out(text);
+  }
+};
+
+/** Finish a run of liveLine() updates, moving to a fresh line. */
+export const endLiveLine = (): void => {
+  if (isTTY) realStdoutWrite('\n');
+};
+
 /** Aligned key: value summary block. */
 export const summary = (rows: Array<[string, string]>): void => {
   const width = Math.max(...rows.map(([k]) => k.length));

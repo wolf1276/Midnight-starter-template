@@ -1,9 +1,8 @@
 import { appendFileSync } from 'node:fs';
-import { get } from 'node:https';
 import { WebSocket } from 'ws';
 import { createLogger } from '../logger-utils.js';
 import { type Config, PreviewRemoteConfig, PreprodRemoteConfig } from '../config.js';
-import { type TestEnvironment } from '@midnight-ntwrk/testkit-js';
+import { type EnvironmentConfiguration, type TestEnvironment } from '@midnight-ntwrk/testkit-js';
 import { type WalletFacade } from '@midnight-ntwrk/wallet-sdk-facade';
 import { MidnightWalletProvider } from '../midnight-wallet-provider.js';
 import {
@@ -31,6 +30,7 @@ globalThis.WebSocket = WebSocket as unknown as typeof globalThis.WebSocket;
 const rawArgs = process.argv.slice(2);
 const verbose = rawArgs.includes('--verbose') || rawArgs.includes('--debug');
 const network = rawArgs.find((a) => !a.startsWith('--')) ?? 'preview';
+const networkLabel = network === 'preprod' ? 'Preprod' : 'Preview';
 
 const config: Config = network === 'preprod' ? new PreprodRemoteConfig() : new PreviewRemoteConfig();
 const logger = await createLogger(config.logDir, !verbose);
@@ -46,75 +46,153 @@ const quiet = <T>(fn: () => Promise<T>): Promise<T> =>
   withQuiet(!verbose, (chunk) => appendFileSync(rawLogPath, chunk), fn);
 
 const FUNDING_TIMEOUT_MS = 15 * 60 * 1000;
-
-const FAUCET_CHECK_TIMEOUT_MS = 10_000;
+const BALANCE_POLL_INTERVAL_MS = 5_000;
 
 const deployStart = Date.now();
 
-/** Quick reachability check for the faucet URL — warn early if it's down. */
-async function checkFaucetReachable(faucetUrl: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const url = new URL(faucetUrl);
-    const req = get(url, { timeout: FAUCET_CHECK_TIMEOUT_MS, rejectUnauthorized: false }, (res) => {
-      res.destroy();
-      resolve(true);
-    });
-    req.on('error', () => resolve(false));
-    req.on('timeout', () => {
-      req.destroy();
-      resolve(false);
-    });
-  });
+interface FaucetOutage {
+  reason: string;
+}
+
+// Reason codes the faucet's health endpoint reports, translated into plain language.
+const FAUCET_OUTAGE_REASONS: Record<string, string> = {
+  WALLET_BALANCE_LOW: 'The faucet wallet has run out of test tokens to distribute.',
+};
+
+const getAxiosRequestUrl = (e: unknown): string | undefined => {
+  const url = (e as { config?: { url?: unknown } } | undefined)?.config?.url;
+  return typeof url === 'string' ? url : undefined;
+};
+
+const describeFaucetOutage = (e: unknown): FaucetOutage => {
+  const data = (e as { response?: { data?: unknown } } | undefined)?.response?.data;
+  const code = data && typeof data === 'object' && 'reason' in data ? String(data.reason) : undefined;
+  return { reason: (code && FAUCET_OUTAGE_REASONS[code]) ?? 'The public faucet is not currently serving requests.' };
+};
+
+/** True if `e` is an axios error whose request targeted the faucet host. */
+const isFaucetRequestError = (e: unknown, faucetUrl: string | undefined): boolean => {
+  if (!faucetUrl) return false;
+  const requestUrl = getAxiosRequestUrl(e);
+  if (!requestUrl) return false;
+  try {
+    return new URL(requestUrl).host === new URL(faucetUrl).host;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Starts the test environment, tolerating a faucet outage. Node, indexer and the proof
+ * server always have to be healthy to proceed — but a faucet that's down (e.g. depleted)
+ * shouldn't block deployment. The user can still fund the wallet manually and we keep
+ * polling for it, so treat that one dependency as best-effort.
+ */
+async function startEnvironment(): Promise<{ config: EnvironmentConfiguration; faucetOutage?: FaucetOutage }> {
+  try {
+    const envConfiguration = await quiet(() => testEnv.start());
+    return { config: envConfiguration };
+  } catch (e) {
+    // testEnv.start() only reaches the faucet health check after node, indexer and the
+    // proof server have already passed theirs, so the configuration is safe to reuse.
+    let recoveredConfig: EnvironmentConfiguration | undefined;
+    try {
+      recoveredConfig = testEnv.getEnvironmentConfiguration();
+    } catch {
+      // Proof server never came up — this wasn't a faucet-only failure.
+    }
+    if (recoveredConfig && isFaucetRequestError(e, recoveredConfig.faucet)) {
+      return { config: recoveredConfig, faucetOutage: describeFaucetOutage(e) };
+    }
+    throw e;
+  }
+}
+
+function printFaucetOutagePanel(outage: FaucetOutage, address: string, faucetUrl: string | undefined): void {
+  ui.section(`⚠ ${networkLabel} Faucet Unavailable`);
+  ui.info(`The official Midnight ${networkLabel} faucet is currently unable to send test tokens.`);
+  ui.info('');
+  ui.info(`${color.dim('Reason:')} ${outage.reason}`);
+  ui.info('');
+  ui.info('This is a temporary issue with the public faucet, not your project:');
+  ui.success('Docker is healthy');
+  ui.success('Proof Server is healthy');
+  ui.success('Node connection is healthy');
+  ui.success('Indexer is healthy');
+  ui.info('');
+  ui.info('You can:');
+  ui.info('  • Wait until the faucet is refilled');
+  ui.info('  • Fund this wallet manually from another source');
+  ui.info('');
+  ui.summary([
+    ['Wallet Address', address],
+    ...(faucetUrl ? ([[`${networkLabel} Faucet`, faucetUrl]] as Array<[string, string]>) : []),
+  ]);
+  ui.info('');
+  ui.info('Deployment will continue automatically once funds arrive.');
+  ui.info('');
 }
 
 async function runFundingScreen(
   walletFacade: WalletFacade,
-  envConfiguration: Awaited<ReturnType<TestEnvironment['start']>>,
+  envConfiguration: EnvironmentConfiguration,
+  address: string,
+  knownFaucetOutage: FaucetOutage | undefined,
 ): Promise<Awaited<ReturnType<typeof waitForUnshieldedFunds>>> {
-  const address = await getUnshieldedAddress(logger, walletFacade);
-
-  ui.section('💰 Wallet Funding Required');
+  ui.section('💰 Wallet Needs Funding');
+  ui.info("This wallet doesn't have enough test tokens to deploy.");
+  ui.info('');
   ui.summary([
-    ['Network', network],
-    ['Funding Address', address],
-    ['Faucet', envConfiguration.faucet ?? '(none configured for this network)'],
+    ['Wallet Address', address],
+    ...(envConfiguration.faucet
+      ? ([[`${networkLabel} Faucet`, envConfiguration.faucet]] as Array<[string, string]>)
+      : []),
   ]);
   ui.info('');
-  ui.info('Open the faucet, paste the address above, request test tokens, and this');
-  ui.info('deployment will automatically continue once funds arrive.');
+  ui.info('Copy the address above into the faucet. Once funds arrive, deployment will');
+  ui.info('automatically continue — no need to rerun this command.');
   ui.info('');
 
-  // Quick faucet reachability check — avoids a 15-minute silent timeout if the
-  // faucet URL is stale or the network is unreachable.
-  if (envConfiguration.faucet) {
-    const faucetOk = await quiet(() => checkFaucetReachable(envConfiguration.faucet!));
-    if (!faucetOk) {
-      ui.warn(
-        `Faucet at ${envConfiguration.faucet} appears unreachable. Funding may still work, but if deployment times out, check that the faucet URL is correct and accessible.`,
-      );
-      ui.info('');
-    }
+  let outageShown = false;
+  if (knownFaucetOutage) {
+    printFaucetOutagePanel(knownFaucetOutage, address, envConfiguration.faucet);
+    outageShown = true;
   }
 
-  const fundingStep = ui.step('Waiting for funds');
+  ui.info('⏳ Waiting for funds...');
+  ui.info(`${color.dim('Checking every')} ${BALANCE_POLL_INTERVAL_MS / 1000}s`);
   let lastBalance = 0n;
   try {
     const unshieldedState = await quiet(() =>
-      waitForUnshieldedFunds(logger, walletFacade, envConfiguration, unshieldedToken(), true, 2_000, {
-        timeoutMs: FUNDING_TIMEOUT_MS,
-        onBalance: (balance) => {
-          lastBalance = balance;
+      waitForUnshieldedFunds(
+        logger,
+        walletFacade,
+        envConfiguration,
+        unshieldedToken(),
+        true,
+        BALANCE_POLL_INTERVAL_MS,
+        {
+          timeoutMs: FUNDING_TIMEOUT_MS,
+          onBalance: (balance) => {
+            if (balance === lastBalance) return;
+            lastBalance = balance;
+            ui.liveLine(`${color.dim('Current Balance:')} ${balance} tNIGHT`);
+          },
+          onFaucetError: (e) => {
+            if (outageShown) return;
+            printFaucetOutagePanel(describeFaucetOutage(e), address, envConfiguration.faucet);
+            outageShown = true;
+          },
         },
-      }),
+      ),
     );
+    ui.endLiveLine();
     const balance = unshieldedState.balances[unshieldedToken().raw] ?? 0n;
-    fundingStep.succeed(`Funds detected (balance: ${balance} tNIGHT)`);
+    ui.success(`Funds received. Balance: ${balance} tNIGHT`);
     return unshieldedState;
   } catch (e) {
+    ui.endLiveLine();
     if (e instanceof FundingTimeoutError) {
-      fundingStep.fail(
-        `No funds received after ${FUNDING_TIMEOUT_MS / 60_000} minutes (balance: ${lastBalance} tNIGHT)`,
-      );
       throw explainableError({
         what: 'Wallet funding timed out',
         why: `No test tokens arrived at ${address} within ${FUNDING_TIMEOUT_MS / 60_000} minutes.`,
@@ -122,7 +200,6 @@ async function runFundingScreen(
         nextCommand: `npm run deploy -- --network ${network}`,
       });
     }
-    fundingStep.fail('Funding check failed');
     throw e;
   }
 }
@@ -142,10 +219,12 @@ async function main() {
   ui.info(`${color.dim('Network:')} ${network}`);
 
   const envStep = ui.step('Starting environment');
-  const envConfiguration = await quiet(() => testEnv.start());
-  envStep.succeed('Environment ready');
-
-  ui.section('💰 Wallet Setup');
+  const { config: envConfiguration, faucetOutage: startupFaucetOutage } = await startEnvironment();
+  if (startupFaucetOutage) {
+    envStep.warn('Environment ready (faucet unavailable)');
+  } else {
+    envStep.succeed('Environment ready');
+  }
 
   const walletStep = ui.step('Creating deployment wallet');
   const seed = toHex(randomBytes(32));
@@ -154,15 +233,22 @@ async function main() {
   await quiet(() => walletProvider.start());
   walletStep.succeed('Wallet created');
 
-  const balanceStep = ui.step('Checking wallet balance');
   let unshieldedState = await quiet(() => getInitialUnshieldedState(logger, walletFacade.unshielded));
-  const nightBalance = unshieldedState.balances[unshieldedToken().raw];
-  if (nightBalance === undefined || nightBalance === 0n) {
-    balanceStep.warn('No funds yet');
-    unshieldedState = await runFundingScreen(walletFacade, envConfiguration);
+  const walletAddress = await getUnshieldedAddress(logger, walletFacade);
+  let nightBalance = unshieldedState.balances[unshieldedToken().raw] ?? 0n;
+
+  // Always show the wallet address and balance — never leave the user guessing what to fund.
+  ui.section('💰 Deployment Wallet');
+  ui.summary([
+    ['Network', networkLabel],
+    ['Wallet Address', walletAddress],
+    ['Current Balance', `${nightBalance} tNIGHT`],
+  ]);
+
+  if (nightBalance === 0n) {
+    unshieldedState = await runFundingScreen(walletFacade, envConfiguration, walletAddress, startupFaucetOutage);
+    nightBalance = unshieldedState.balances[unshieldedToken().raw] ?? 0n;
     ui.section('🚀 Continuing Deployment');
-  } else {
-    balanceStep.succeed(`Balance: ${nightBalance} tNIGHT`);
   }
 
   if (config.generateDust) {
@@ -256,6 +342,17 @@ function classifyError(e: unknown): ActionableError {
       what: 'Proof server is unavailable',
       why: message,
       fix: 'Make sure Docker is running so the proof server container can start, then retry.',
+      nextCommand: `npm run deploy -- --network ${network}`,
+    };
+  }
+  if (/status code 5\d\d/i.test(message)) {
+    const requestUrl = getAxiosRequestUrl(e);
+    return {
+      what: 'A remote Midnight service is temporarily unavailable',
+      why: requestUrl
+        ? `${requestUrl} returned an error response. This is an issue with that remote service, not your project.`
+        : `A remote request failed with a server error. ${message}`,
+      fix: 'This is usually temporary — wait a bit and retry.',
       nextCommand: `npm run deploy -- --network ${network}`,
     };
   }

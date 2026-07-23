@@ -105,6 +105,8 @@ export class FundingTimeoutError extends Error {}
 export interface WaitForFundsOptions {
   /** Called with the latest known unshielded balance while waiting. */
   onBalance?: (balance: bigint) => void;
+  /** Called if the automatic faucet request fails (e.g. faucet depleted/unreachable). Non-fatal. */
+  onFaucetError?: (e: unknown) => void;
   /** If set, reject with FundingTimeoutError instead of waiting forever. */
   timeoutMs?: number;
 }
@@ -123,7 +125,14 @@ export const waitForUnshieldedFunds = async (
   logger.debug(`Using unshielded address: ${unshieldedAddress.toString()} waiting for funds...`);
   if (fundFromFaucet && env.faucet) {
     logger.debug('Requesting tokens from faucet...');
-    await new FaucetClient(env.faucet, logger).requestTokens(unshieldedAddress.toString());
+    try {
+      await new FaucetClient(env.faucet, logger).requestTokens(unshieldedAddress.toString());
+    } catch (e) {
+      // Best-effort: the faucet may be temporarily unavailable (e.g. depleted). Fall through
+      // to the polling loop below so a manually-funded wallet still unblocks deployment.
+      logger.warn(`Automatic faucet request failed, falling back to manual funding: ${(e as Error).message}`);
+      opts?.onFaucetError?.(e);
+    }
   }
   const initialBalance = initialState.balances[tokenType.raw];
   if (initialBalance === undefined || initialBalance === 0n) {
