@@ -55,14 +55,10 @@ const deployStart = Date.now();
 async function checkFaucetReachable(faucetUrl: string): Promise<boolean> {
   return new Promise((resolve) => {
     const url = new URL(faucetUrl);
-    const req = get(
-      url,
-      { timeout: FAUCET_CHECK_TIMEOUT_MS, rejectUnauthorized: false },
-      (res) => {
-        res.destroy();
-        resolve(true);
-      },
-    );
+    const req = get(url, { timeout: FAUCET_CHECK_TIMEOUT_MS, rejectUnauthorized: false }, (res) => {
+      res.destroy();
+      resolve(true);
+    });
     req.on('error', () => resolve(false));
     req.on('timeout', () => {
       req.destroy();
@@ -205,12 +201,15 @@ async function main() {
 
   const explorerUrl = config.explorerUrl ? config.explorerUrl.replace('{contractAddress}', address) : '';
   ui.section('📄 Deployment Summary');
-  ui.summary([
+  const summaryRows: Array<[string, string]> = [
     ['Network', network],
     ['Contract Address', address],
-    ...(explorerUrl ? [['Explorer', explorerUrl]] : []),
     ['Indexer', envConfiguration.indexer],
-  ]);
+  ];
+  if (explorerUrl) {
+    summaryRows.splice(2, 0, ['Explorer', explorerUrl]);
+  }
+  ui.summary(summaryRows);
 
   logger.info(`Deployed contract at address: ${address}`);
   // Machine-parseable line consumed by scripts/deploy/deploy.mjs to write
