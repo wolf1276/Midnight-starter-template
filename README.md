@@ -75,6 +75,22 @@ npm run deploy
 | `npm run test` | Run tests across the workspace |
 | `npm run wallet:reset` | Reset your local wallet |
 
+## Continuous Integration
+
+Every push and pull request runs the `CI` workflow (`.github/workflows/ci.yaml`):
+
+- **Build matrix** — lint, typecheck, build, and test the contract, API, CLI, and web workspaces
+  on Ubuntu, macOS, and Windows in parallel (`fail-fast: false`, so one platform failing doesn't
+  hide results from the others). Onboarding scripts (`setup.sh`, `scripts/**/*.mjs`) are also
+  syntax-checked on every platform (the `setup.sh` check is skipped on Windows, where it isn't
+  meant to run natively — see [Prerequisites](#prerequisites)).
+- **Integration job** — runs only on Ubuntu, since it needs Docker. It builds the workspace,
+  starts the local blockchain stack (node, indexer, proof server) with `npm run blockchain:start`,
+  runs `npm run doctor` to verify the environment and services are healthy, then tears the stack
+  down. No live testnet deployments or faucet funding happen in CI.
+- Build output and Docker logs are uploaded as artifacts whenever a job fails, to make debugging
+  CI failures easier without needing to reproduce locally.
+
 ## Documentation
 
 - [What Is Midnight?](docs/WHAT_IS_MIDNIGHT.md) — background on the network and ZK model
