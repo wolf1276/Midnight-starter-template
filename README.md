@@ -1,39 +1,82 @@
 # Midnight Starter Template
 
-A one-item bulletin board dApp built on [Midnight](https://midnight.network/): anyone can post a
-message, but only the author can remove it. Zero-knowledge proofs enforce the rules without
-revealing who anyone is on-chain. Use this repo as a starting point for your own Midnight project.
+A privacy-preserving dApp starter for [Midnight Network](https://midnight.network/) — a bulletin
+board where anyone can post a message, but only the author can remove it. Zero-knowledge proofs
+enforce the rules on-chain without ever revealing who posted what.
 
-## Prerequisites
+Use this as the starting point for your own Midnight project: contract, API, CLI, and frontend
+already wired together.
 
-- [Git](https://git-scm.com/)
-- [Docker](https://docs.docker.com/get-docker/)
-- Node.js — `setup.sh` will install/check this for you
+- **Zero-knowledge by default** — write rules in [Compact](https://docs.midnight.network/), get privacy for free
+- **Full stack, ready to go** — smart contract, API layer, CLI, and Next.js frontend, all connected
+- **One-command setup** — Docker services, proof server, and wallet handled for you
 
 ## Quick Start
 
 ```bash
 git clone <this-repo-url>
 cd example-bboard
-./setup.sh
-npm run dev
+
+./setup.sh      # installs deps, builds the contract, starts local services
+npm run dev     # starts the frontend
+
+cd contracts
+npm run deploy  # deploys your first contract
 ```
 
 Open http://localhost:3000 with the [Lace](https://chromewebstore.google.com/detail/lace/gafhhkghbfjjkeiendhlofajokpaflmk)
 or [1AM](https://1am.com/) wallet extension installed.
 
-## Deploy a Contract
+## Prerequisites
+
+- [Git](https://git-scm.com/)
+- [Docker](https://docs.docker.com/get-docker/)
+- Node.js — `setup.sh` checks and installs this for you
+
+## What `setup.sh` Does
+
+- Installs dependencies across the workspace
+- Builds the smart contract
+- Starts local Docker services (node, indexer, proof server)
+- Runs health checks to confirm everything is up
+- Leaves you with a ready-to-develop environment
+
+## Deploy Your First Contract
 
 ```bash
 cd contracts
-npm run deploy -- --network preview
+npm run deploy
 ```
 
-Follow the on-screen prompts to fund your wallet from the faucet. Once deployed, the contract
-address is saved automatically for the frontend to use.
+This will:
 
-## Learn More
+1. Ask which network to deploy to
+2. Create or load a local wallet automatically
+3. Show funding instructions if your wallet balance is too low
+4. Deploy the contract and save its address
+5. Update the frontend configuration to point at your new deployment
 
-- [What Is Midnight?](docs/WHAT_IS_MIDNIGHT.md)
-- [Troubleshooting](docs/TROUBLESHOOTING.md)
-- [Midnight Documentation](https://docs.midnight.network/examples/dapps/bboard)
+## Daily Development
+
+```bash
+npm run dev
+
+cd contracts
+npm run deploy
+```
+
+## Common Commands
+
+| Command | What it does |
+| --- | --- |
+| `npm run dev` | Start the frontend dev server |
+| `npm run doctor` | Check your environment is set up correctly |
+| `npm run test` | Run tests across the workspace |
+| `npm run wallet:reset` | Reset your local wallet |
+
+## Documentation
+
+- [What Is Midnight?](docs/WHAT_IS_MIDNIGHT.md) — background on the network and ZK model
+- [Troubleshooting](docs/TROUBLESHOOTING.md) — fixes for common setup issues
+- [AGENTS.md](AGENTS.md) — repo layout notes for AI coding agents
+- [Official Midnight Documentation](https://docs.midnight.network/)
