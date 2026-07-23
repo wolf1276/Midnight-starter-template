@@ -47,6 +47,9 @@ Zod · rxjs · lucide-react
 
 ## Getting started
 
+From the repo root, `./setup.sh` handles all of this automatically (see the root `README.md`).
+To do it manually:
+
 ```bash
 # from the repo root — this app is part of the npm workspace
 npm install
@@ -54,7 +57,7 @@ npm run build:contract   # compiles the Compact contract and its TS bindings
 npm run build -w @midnight-ntwrk/bboard-api
 
 cp web/.env.example web/.env.local
-npm run dev -w @midnight-ntwrk/bboard-web
+npm run dev   # or: npm run dev -w @midnight-ntwrk/bboard-web
 ```
 
 Then open http://localhost:3000. You'll need a Midnight-compatible wallet extension (e.g. Lace) installed
@@ -99,8 +102,9 @@ This is a standard Next.js app — deploy it however you deploy Next.js:
 
 - **Vercel / Netlify**: point the project root at `web/`, build command `npm run build`, no
   server-side secrets required.
-- **Docker / self-hosted Node**: `npm run build && npm run start` (add a `Dockerfile` per your
-  infrastructure's conventions; this app has no server-only environment variables to inject).
+- **Docker / self-hosted Node**: use the root `Dockerfile`'s `prod` target —
+  `docker build --target prod -t bboard-web:prod .` from the repo root — which builds the
+  standalone Next.js output. This app has no server-only environment variables to inject.
 
 Whichever platform you use, make sure `NEXT_PUBLIC_NETWORK_ID` is set at build time and matches the
 network your users' wallets are configured for.

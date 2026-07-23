@@ -10,10 +10,25 @@
   },
   "scripts": {
     "postinstall": "patch-package",
+    "setup": "./setup.sh",
+    "doctor": "node scripts/doctor.mjs",
+    "verify": "npm run doctor",
+    "dev": "npm run dev -w @midnight-ntwrk/bboard-web",
+    "test": "npm run test --workspaces --if-present",
+    "clean": "npm run clean -w @midnight-ntwrk/bboard-web --if-present && rm -rf node_modules cli/node_modules web/node_modules api/node_modules contracts/node_modules cli/dist api/dist contracts/dist web/.next",
     "build:contract": "npm run compact -w @midnight-ntwrk/bboard-contract && npm run build -w @midnight-ntwrk/bboard-contract",
+    "build:api": "npm run build -w @midnight-ntwrk/bboard-api",
     "build:cli": "npm run build -w @midnight-ntwrk/bboard-cli",
-    "build:all": "npm run build:contract && npm run build:cli",
-    "deploy": "node scripts/deploy/deploy.mjs"
+    "build:all": "npm run build:contract && npm run build:api && npm run build:cli",
+    "contracts:build": "npm run build:contract",
+    "contracts:test": "npm run test -w @midnight-ntwrk/bboard-contract",
+    "contracts:deploy": "npm run deploy --",
+    "deploy": "node scripts/deploy/deploy.mjs",
+    "docker:start": "docker compose -f docker/docker-compose.yml --profile web up -d --build",
+    "docker:stop": "docker compose -f docker/docker-compose.yml --profile web down",
+    "docker:reset": "docker compose -f docker/docker-compose.yml --profile web down -v --remove-orphans",
+    "blockchain:start": "docker compose -f docker/docker-compose.yml up -d node indexer proof-server",
+    "blockchain:reset": "docker compose -f docker/docker-compose.yml rm -sf node indexer proof-server"
   },
   "workspaces": {
     "packages": [

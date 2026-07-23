@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+**/.next
+**/out
+**/coverage
+**/logs
+*.log
+.git
+.github
+docs
+deployment.json
+web/.env.local

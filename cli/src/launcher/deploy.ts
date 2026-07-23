@@ -74,6 +74,15 @@ async function main() {
   assertIsContractAddress(address);
   logger.info(`Deployed contract at address: ${address}`);
   console.log(`\nDeployed contract at address: ${address}\n`);
+  // Machine-parseable line consumed by scripts/deploy/deploy.mjs to write
+  // deployment.json and update web/.env.local — keep this format stable.
+  console.log(`DEPLOYMENT_RESULT ${JSON.stringify({
+    network,
+    contractAddress: address,
+    indexer: envConfiguration.indexer,
+    node: envConfiguration.node,
+    deployedAt: new Date().toISOString(),
+  })}`);
 
   await walletProvider.stop();
   await testEnv.shutdown();

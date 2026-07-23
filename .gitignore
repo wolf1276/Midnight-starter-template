@@ -60,5 +60,8 @@ jspm_packages/
 # Compact
 managed/
 
+# Local deployment artifacts (ephemeral, per-developer)
+/deployment.json
+
 .claude
 .midnight-expert*.heapsnapshot

@@ -8,6 +8,7 @@ import type { NextConfig } from 'next';
  */
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  output: 'standalone',
   outputFileTracingRoot: path.join(__dirname, '..'),
   transpilePackages: ['@midnight-ntwrk/bboard-api', '@midnight-ntwrk/bboard-contract'],
   turbopack: {

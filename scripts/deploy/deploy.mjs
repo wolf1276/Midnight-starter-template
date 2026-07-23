@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn, execSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -88,6 +88,7 @@ async function main() {
 
   console.log(`\n━━━ Deploying to ${network} ━━━\n`);
 
+  let output = '';
   const child = spawn(
     'node',
     [
@@ -98,7 +99,7 @@ async function main() {
     ],
     {
       cwd: resolve(rootDir, 'cli'),
-      stdio: 'inherit',
+      stdio: ['inherit', 'pipe', 'inherit'],
       shell: true,
       env: {
         ...process.env,
@@ -108,12 +109,57 @@ async function main() {
     },
   );
 
+  child.stdout.on('data', (chunk) => {
+    process.stdout.write(chunk);
+    output += chunk.toString();
+  });
+
   child.on('exit', (code) => {
     if (code === 0) {
+      const match = output.match(/^DEPLOYMENT_RESULT (.+)$/m);
+      if (match) {
+        try {
+          const result = JSON.parse(match[1]);
+          saveDeploymentArtifacts(result);
+        } catch (e) {
+          console.warn(`\n⚠ Could not parse deployment result: ${e.message}`);
+        }
+      }
       console.log('\n✓ Deployment complete');
     }
     process.exit(code ?? 1);
   });
+}
+
+function saveDeploymentArtifacts(result) {
+  const deploymentPath = resolve(rootDir, 'deployment.json');
+  let history = [];
+  if (existsSync(deploymentPath)) {
+    try {
+      history = JSON.parse(readFileSync(deploymentPath, 'utf-8'));
+      if (!Array.isArray(history)) history = [];
+    } catch {
+      history = [];
+    }
+  }
+  history.unshift(result);
+  writeFileSync(deploymentPath, JSON.stringify(history, null, 2) + '\n');
+  console.log(`✓ Saved deployment record to deployment.json`);
+
+  const envLocalPath = resolve(rootDir, 'web', '.env.local');
+  if (existsSync(envLocalPath)) {
+    let env = readFileSync(envLocalPath, 'utf-8');
+    const line = `NEXT_PUBLIC_CONTRACT_ADDRESS=${result.contractAddress}`;
+    env = /^NEXT_PUBLIC_CONTRACT_ADDRESS=.*$/m.test(env)
+      ? env.replace(/^NEXT_PUBLIC_CONTRACT_ADDRESS=.*$/m, line)
+      : `${env.trimEnd()}\n\n# Set automatically by npm run contracts:deploy\n${line}\n`;
+    writeFileSync(envLocalPath, env);
+    console.log('✓ Updated web/.env.local with NEXT_PUBLIC_CONTRACT_ADDRESS');
+  }
+
+  console.log(`\nNetwork:  ${result.network}`);
+  console.log(`Contract: ${result.contractAddress}`);
+  console.log(`Indexer:  ${result.indexer}  (query this to inspect on-chain contract state)`);
 }
 
 main();
