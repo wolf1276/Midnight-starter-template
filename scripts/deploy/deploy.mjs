@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { select } from '@inquirer/prompts';
 import { versions } from '../lib/versions.mjs';
+import { ensureDockerRunning, ensureLocalMidnightServices } from '../lib/infra.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, '..', '..');
@@ -159,16 +160,9 @@ function ensureRequiredNodeVersion() {
 }
 
 async function main() {
+  fmt.section(`\u{1F9F0} Preparing Local Environment`);
+
   await ensureRequiredNodeVersion();
-
-  if (network === null) {
-    network = await selectNetwork();
-  }
-
-  deployStart = Date.now();
-
-  fmt.section(`\u{1F680} Midnight Contract Deployment`);
-  fmt.info(`Network: ${network}`);
 
   const rootNodeModules = resolve(rootDir, 'node_modules');
   if (!existsSync(rootNodeModules)) {
@@ -179,15 +173,17 @@ async function main() {
   }
   fmt.ok('Dependencies installed');
 
-  try {
-    execSync('docker info > /dev/null 2>&1', { shell: true });
-    fmt.ok('Docker is running');
-  } catch {
-    fmt.fail('Docker is not running.');
-    fmt.info('Install Docker Desktop (or start the Docker daemon) and start it, then retry.');
-    fmt.info('  https://docs.docker.com/get-docker/');
-    process.exit(1);
+  if (network === null) {
+    network = await selectNetwork();
   }
+
+  deployStart = Date.now();
+
+  await ensureDockerRunning(fmt);
+  await ensureLocalMidnightServices(rootDir, fmt, verbose);
+
+  fmt.section(`\u{1F680} Midnight Contract Deployment`);
+  fmt.info(`Network: ${network}`);
 
   try {
     execSync('compact --version > /dev/null 2>&1', { shell: true });
