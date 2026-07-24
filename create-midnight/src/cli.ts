@@ -12,7 +12,13 @@ import { installDependencies } from './installer.js';
 import { initGitRepo } from './git.js';
 import { runProjectSetup } from './setup.js';
 import { CLIError, printError } from './errors.js';
-import { assertTargetAvailable, commandExists, detectPackageManager, type PackageManager } from './utils.js';
+import {
+  assertTargetAvailable,
+  commandExists,
+  detectPackageManager,
+  PACKAGE_MANAGER_LABELS,
+  type PackageManager
+} from './utils.js';
 import { setVerbose, verbose } from './logger.js';
 
 const program = new Command();
@@ -87,8 +93,10 @@ async function main(): Promise<void> {
         : opts.useBun
           ? 'bun'
           : undefined;
-  const pm = detectPackageManager(pmOverride);
+  const pm = await detectPackageManager(pmOverride);
 
+  console.log('');
+  console.log(`  ${logSymbols.success} ${pc.green(`Using ${PACKAGE_MANAGER_LABELS[pm]}`)}`);
   console.log('');
   console.log(pc.dim('━'.repeat(28)));
   console.log('');
@@ -123,6 +131,7 @@ async function main(): Promise<void> {
       console.log('');
       console.log(pc.dim("  Run the following command when you're ready:"));
       console.log(`  ${pc.cyan(`${pm} install`)}`);
+      printPackageManagerOverrideHint(pm);
     }
   }
 
@@ -156,6 +165,7 @@ async function main(): Promise<void> {
         console.log(pc.dim('  Run:'));
         console.log(`  ${pc.cyan(`${pm} run setup`)}`);
         console.log(pc.dim('  to finish configuring the project.'));
+        printPackageManagerOverrideHint(pm);
       }
     }
   } else if (answers.runSetup && !answers.installDeps) {
@@ -166,6 +176,14 @@ async function main(): Promise<void> {
   console.log(pc.dim('━'.repeat(28)));
 
   printSuccessScreen(answers, pm, completed);
+}
+
+/** Suggests falling back to another package manager after an unexpected failure. */
+function printPackageManagerOverrideHint(pm: PackageManager): void {
+  if (pm === 'npm') return;
+  console.log('');
+  console.log(pc.dim(`  If ${PACKAGE_MANAGER_LABELS[pm]} keeps failing, retry with a different package manager:`));
+  console.log(`  ${pc.cyan('--use-npm')} or ${pc.cyan('--use-pnpm')}`);
 }
 
 interface StepOptions {
@@ -204,7 +222,7 @@ function printSuccessScreen(
   const check = (done: boolean) => (done ? pc.green('✓') : pc.dim('✗'));
 
   console.log('');
-  console.log(pc.bold(`🎉 Your Midnight project is ready!`));
+  console.log(pc.bold(`🎉 Your Midnight application is ready!`));
   console.log('');
   console.log(pc.bold('Project'));
   console.log(`  ${answers.projectName}`);
@@ -213,7 +231,7 @@ function printSuccessScreen(
   console.log(`  ${networkLabel}`);
   console.log('');
   console.log(pc.bold('Package Manager'));
-  console.log(`  ${pm}`);
+  console.log(`  ${PACKAGE_MANAGER_LABELS[pm]}`);
   console.log('');
   console.log(pc.bold('Completed'));
   console.log(`  ${check(completed.template)} Template downloaded`);

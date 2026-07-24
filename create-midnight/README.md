@@ -24,8 +24,10 @@ npx create-midnight my-app --verbose
    release (see [Version locking](#version-locking) below).
 3. Configures the project — renames `package.json`, writes `web/.env.local` for the
    selected network, and strips template-only files.
-4. Installs dependencies with your detected package manager (npm/pnpm/yarn/bun), or
-   the one forced via `--use-npm` / `--use-pnpm` / `--use-yarn` / `--use-bun`.
+4. Installs dependencies with the fastest package manager available on your system
+   (Bun → pnpm → Yarn → npm, in that order — see [Package manager
+   detection](#package-manager-detection)), or the one forced via `--use-npm` /
+   `--use-pnpm` / `--use-yarn` / `--use-bun`.
 5. Initializes a Git repository with an initial commit.
 6. Optionally runs `npm run setup` (installs/checks prerequisites, builds contracts,
    starts Docker + the Proof Server, and runs health checks).
@@ -55,6 +57,36 @@ npx create-midnight my-app \
 | `--ref <ref>` | **Development only.** Override the version-locked template ref — see below |
 | `-y, --yes` | Accept defaults for every prompt |
 | `--verbose` | Print full error output for debugging |
+
+## Package manager detection
+
+`create-midnight` automatically picks the fastest package manager you have installed
+— no manual configuration, no interactive prompt. It probes for each executable on
+your `PATH`, in this priority order:
+
+1. **Bun** — preferred when installed, since it installs dependencies and starts dev
+   servers faster than the alternatives.
+2. **pnpm**
+3. **Yarn**
+4. **npm** — always available (it ships with Node), so it's the guaranteed fallback.
+
+Detection checks for the executable itself (e.g. `bun --version`), not for a
+lockfile — the project doesn't exist yet at detection time. Whichever one is found
+first is used for every subsequent command (`install`, `run setup`, `run dev`,
+`run deploy`), and the CLI prints which one it picked:
+
+```
+✓ Using Bun
+```
+
+To skip auto-detection and force a specific package manager, pass one of
+`--use-bun`, `--use-pnpm`, `--use-yarn`, or `--use-npm` — these always take
+precedence over what's detected on your system.
+
+If the detected (or forced) package manager fails unexpectedly during install or
+setup, the CLI shows a friendly error with the manual command to retry, and — if
+you're on Bun — suggests falling back to `--use-npm` or `--use-pnpm`. Stack traces
+are hidden unless you pass `--verbose`.
 
 ## Version locking
 
@@ -158,9 +190,10 @@ src/
 ## FAQ
 
 **Which package managers are supported?**
-npm, pnpm, yarn, and bun. By default the CLI detects the one you invoked it with
-(via `npm_config_user_agent`, e.g. `pnpm create midnight`); use `--use-npm` /
-`--use-pnpm` / `--use-yarn` / `--use-bun` to force a specific one.
+npm, pnpm, Yarn, and Bun. By default the CLI auto-detects the fastest one installed
+on your system (Bun → pnpm → Yarn → npm — see [Package manager
+detection](#package-manager-detection)); use `--use-npm` / `--use-pnpm` /
+`--use-yarn` / `--use-bun` to force a specific one.
 
 **What Node version do I need?**
 Node 18.18 or newer (see `engines` in `package.json`).

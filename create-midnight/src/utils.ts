@@ -53,12 +53,32 @@ export async function commandExists(command: string): Promise<boolean> {
 
 export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
 
-export function detectPackageManager(override?: PackageManager): PackageManager {
+export const PACKAGE_MANAGER_LABELS: Record<PackageManager, string> = {
+  bun: 'Bun',
+  pnpm: 'pnpm',
+  yarn: 'Yarn',
+  npm: 'npm'
+};
+
+// Preference order when nothing is forced via --use-*: the fastest available
+// runtime wins. npm ships with Node, so it's the guaranteed fallback.
+const DETECTION_PRIORITY: PackageManager[] = ['bun', 'pnpm', 'yarn', 'npm'];
+
+/**
+ * Detects the best available package manager by probing for the executable on
+ * PATH (not lockfiles — the project doesn't exist yet). `checkCommand` is
+ * injectable for tests.
+ */
+export async function detectPackageManager(
+  override?: PackageManager,
+  checkCommand: (command: string) => Promise<boolean> = commandExists
+): Promise<PackageManager> {
   if (override) return override;
-  const userAgent = process.env.npm_config_user_agent ?? '';
-  if (userAgent.startsWith('pnpm')) return 'pnpm';
-  if (userAgent.startsWith('yarn')) return 'yarn';
-  if (userAgent.startsWith('bun')) return 'bun';
+
+  for (const pm of DETECTION_PRIORITY) {
+    if (pm === 'npm') return 'npm';
+    if (await checkCommand(pm)) return pm;
+  }
   return 'npm';
 }
 

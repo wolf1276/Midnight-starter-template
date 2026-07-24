@@ -117,6 +117,20 @@ describe('create-midnight CLI (local template fixture)', () => {
     expect(result.stderr).toMatch(/--network must be "preview" or "preprod"/);
   });
 
+  it('announces the detected/forced package manager and shows it on the success screen', () => {
+    const result = runCli(['pm-app', '--yes', '--no-install', '--no-setup', '--no-git', '--use-npm']);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Using npm');
+    expect(result.stdout).toMatch(/Package Manager\s+npm/);
+  });
+
+  it('lets an override flag take precedence over auto-detection', () => {
+    const result = runCli(['pm-override-app', '--yes', '--no-install', '--no-setup', '--no-git', '--use-pnpm']);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Using pnpm');
+    expect(result.stdout).toMatch(/Package Manager\s+pnpm/);
+  });
+
   it('rejects an unknown --template', () => {
     const result = runCli(['bad-template-app', '--yes', '--no-install', '--no-setup', '--no-git', '--template', 'nonexistent']);
     expect(result.status).not.toBe(0);

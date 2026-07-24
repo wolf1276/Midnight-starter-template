@@ -1,42 +1,37 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { detectPackageManager, toPackageName, validateProjectName } from '../src/utils.js';
 
+/** Simulates only the given executables being present on PATH. */
+function checkerFor(available: string[]) {
+  return async (command: string) => available.includes(command);
+}
+
 describe('detectPackageManager', () => {
-  const originalUserAgent = process.env.npm_config_user_agent;
-
-  afterEach(() => {
-    if (originalUserAgent === undefined) delete process.env.npm_config_user_agent;
-    else process.env.npm_config_user_agent = originalUserAgent;
+  it('prefers bun when everything is available', async () => {
+    expect(await detectPackageManager(undefined, checkerFor(['bun', 'pnpm', 'yarn']))).toBe('bun');
   });
 
-  it('returns the explicit override regardless of user agent', () => {
-    process.env.npm_config_user_agent = 'pnpm/9.0.0 node/v20.0.0';
-    expect(detectPackageManager('bun')).toBe('bun');
+  it('falls back to pnpm when bun is missing', async () => {
+    expect(await detectPackageManager(undefined, checkerFor(['pnpm', 'yarn']))).toBe('pnpm');
   });
 
-  it('detects pnpm from npm_config_user_agent', () => {
-    process.env.npm_config_user_agent = 'pnpm/9.0.0 node/v20.0.0 linux x64';
-    expect(detectPackageManager()).toBe('pnpm');
+  it('falls back to yarn when bun and pnpm are missing', async () => {
+    expect(await detectPackageManager(undefined, checkerFor(['yarn']))).toBe('yarn');
   });
 
-  it('detects yarn from npm_config_user_agent', () => {
-    process.env.npm_config_user_agent = 'yarn/4.0.0 npm/? node/v20.0.0 linux x64';
-    expect(detectPackageManager()).toBe('yarn');
+  it('falls back to npm when nothing else is found', async () => {
+    expect(await detectPackageManager(undefined, checkerFor([]))).toBe('npm');
   });
 
-  it('detects bun from npm_config_user_agent', () => {
-    process.env.npm_config_user_agent = 'bun/1.1.0 npm/? node/v20.0.0 linux x64';
-    expect(detectPackageManager()).toBe('bun');
+  it('returns the explicit override regardless of what is installed', async () => {
+    expect(await detectPackageManager('npm', checkerFor(['bun', 'pnpm', 'yarn']))).toBe('npm');
   });
 
-  it('falls back to npm when no user agent is set', () => {
-    delete process.env.npm_config_user_agent;
-    expect(detectPackageManager()).toBe('npm');
-  });
-
-  it('falls back to npm for an unrecognized user agent', () => {
-    process.env.npm_config_user_agent = 'some-other-tool/1.0.0';
-    expect(detectPackageManager()).toBe('npm');
+  it('honors each override flag', async () => {
+    const checker = checkerFor(['bun', 'pnpm', 'yarn']);
+    expect(await detectPackageManager('bun', checker)).toBe('bun');
+    expect(await detectPackageManager('pnpm', checker)).toBe('pnpm');
+    expect(await detectPackageManager('yarn', checker)).toBe('yarn');
   });
 });
 
