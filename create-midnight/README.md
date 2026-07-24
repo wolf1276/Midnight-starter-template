@@ -1,38 +1,87 @@
 # create-midnight
 
-Scaffold a production-ready [Midnight](https://midnight.network) DApp in seconds.
+**Scaffold a production-ready [Midnight](https://midnight.network) dApp in seconds.**
+
+[![npm version](https://img.shields.io/npm/v/create-midnight.svg)](https://www.npmjs.com/package/create-midnight)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg)](https://nodejs.org)
+
+One command. A complete Midnight development environment — smart contract, API layer, CLI tooling, Next.js frontend, local blockchain node, indexer, and proof server — all wired together and ready to run.
 
 ```bash
 npx create-midnight my-app
-# or
-npm create midnight@latest my-app
 ```
 
-Other common examples:
+---
+
+## Features
+
+| Feature | Details |
+| --- | --- |
+| **One-command scaffolding** | Project name to running app in a single `npx` call |
+| **Midnight smart contracts** | Write privacy-preserving logic in [Compact](https://docs.midnight.network/), compiled and ready |
+| **Local blockchain stack** | Dockerized Midnight node, indexer, and proof server — started automatically |
+| **Smart setup** | Installs prerequisites, builds contracts, starts services, runs health checks |
+| **Automatic validation** | `npm run doctor` verifies your entire environment in one pass |
+| **Deployment tooling** | Deploy to Preview or Preprod networks with wallet and faucet handling built in |
+| **TypeScript throughout** | Contract, API, CLI, and frontend — all typed, all connected |
+| **Modern project structure** | npm workspaces, Next.js App Router, Turbopack, ESLint, Prettier |
+| **Package manager choice** | npm by default; pnpm, Yarn, or Bun with a flag |
+| **Version-locked templates** | Deterministic scaffolding — re-running an older CLI always produces the same project |
+| **Git-ready** | Repository initialized with a pre-commit lint hook |
+| **Doctor command** | Instant environment diagnostics with actionable fix suggestions |
+
+---
+
+## Quick Start
 
 ```bash
-npx create-midnight my-app --network preview
-npx create-midnight my-app --no-install
-npx create-midnight my-app --verbose
+npx create-midnight my-app
 ```
 
-## What it does
+That's it. The CLI will:
 
-1. Prompts for a project name, default network (Preview or Preprod), and whether to
-   initialize Git, install dependencies, and run project setup.
-2. Downloads the official Midnight starter template, **version-locked** to this CLI
-   release (see [Version locking](#version-locking) below).
-3. Configures the project — renames `package.json`, writes `web/.env.local` for the
-   selected network, and strips template-only files.
-4. Installs dependencies with npm, or with pnpm/Yarn/Bun if you pass `--use-pnpm` /
-   `--use-yarn` / `--use-bun` (see [Package manager](#package-manager)).
-5. Initializes a Git repository with an initial commit.
-6. Optionally runs `npm run setup` (installs/checks prerequisites, builds contracts,
-   starts Docker + the Proof Server, and runs health checks).
+1. Ask for your project name and preferred network
+2. Download the starter template
+3. Install dependencies
+4. Initialize a Git repository
+5. Set up Docker, the proof server, and the local node
+6. Run health checks to confirm everything works
 
-## Non-interactive usage
+**Expected output:**
 
-All prompts can be skipped with flags, useful for CI or scripting:
+```
+$ npx create-midnight my-app
+
+? Project name: my-app
+? Default network: Preview
+? Initialize Git repository? Yes
+? Install dependencies? Yes
+? Run project setup? Yes
+
+✓ Downloaded template
+✓ Installed dependencies
+✓ Initialized Git repository
+✓ Environment ready
+
+  Your Midnight dApp is ready at ./my-app
+
+  cd my-app
+  npm run dev       # Start the frontend
+  npm run deploy    # Deploy a contract
+```
+
+### Using with other package managers
+
+```bash
+npx create-midnight my-app --use-pnpm
+npx create-midnight my-app --use-yarn
+npx create-midnight my-app --use-bun
+```
+
+### Non-interactive usage
+
+Skip all prompts with explicit flags — useful for CI and scripting:
 
 ```bash
 npx create-midnight my-app \
@@ -43,226 +92,418 @@ npx create-midnight my-app \
   --yes
 ```
 
-| Flag | Description |
+---
+
+## First Project
+
+After scaffolding, your project is fully functional. Here's what happened under the hood:
+
+### What setup does
+
+| Step | What happens |
 | --- | --- |
-| `[project-name]` | Name of the project / target directory |
-| `--template <name>` | Template to scaffold (default: `starter`) |
-| `--network <network>` | `preview` or `preprod` |
-| `--git` / `--no-git` | Initialize a git repository |
-| `--install` / `--no-install` | Install dependencies |
-| `--setup` / `--no-setup` | Run `npm run setup` after installation (requires `--install`) |
-| `--use-npm` / `--use-pnpm` / `--use-yarn` / `--use-bun` | Use a different package manager (default: npm) |
-| `--ref <ref>` | **Development only.** Override the version-locked template ref — see below |
-| `-y, --yes` | Accept defaults for every prompt |
-| `--verbose` | Print full error output for debugging |
+| **Prerequisites** | Checks for Node.js 24+, Docker, and the Compact CLI — installs what's missing |
+| **Dependencies** | `npm install` across all workspaces (contracts, api, cli, web) |
+| **Build** | Compiles the Compact contract, builds the API and CLI packages |
+| **Environment** | Creates `web/.env.local` with your selected network |
+| **Docker** | Pulls images and starts the Midnight node, indexer, and proof server |
+| **Health checks** | Waits for all services to respond, then runs `npm run doctor` |
+| **Git hooks** | Installs a pre-commit hook that runs linting |
 
-## Package manager
+### Ready to code
 
-`create-midnight` uses npm by default — no detection, no prompt, so project creation
-starts installing immediately:
+When setup completes, you have:
 
-```
-✓ Using npm
-```
+- **A running frontend** at [http://localhost:3000](http://localhost:3000)
+- **A local blockchain node** at port `9944`
+- **An indexer** (GraphQL API) at port `8088`
+- **A proof server** at port `6300`
 
-To use a different package manager, pass `--use-bun`, `--use-pnpm`, or `--use-yarn`
-— it's used for every subsequent command (`install`, `run setup`, `run dev`,
-`run deploy`).
+Install the [Lace](https://chromewebstore.google.com/detail/lace/gafhhkghbfjjkeiendhlofajokpaflmk) or [1AM](https://1am.com/) wallet extension, and you're ready to deploy your first contract.
 
-If the package manager fails unexpectedly during install or setup, the CLI shows a
-friendly error with the manual command to retry. Stack traces are hidden unless you
-pass `--verbose`.
+---
 
-## Version locking
-
-Every published `create-midnight` release scaffolds from a specific Git tag of the
-template repository, not from `main`. The tag is derived directly from the CLI's own
-version:
+## Project Structure
 
 ```
-create-midnight@1.2.0  →  wolf1276/Midnight-starter-template@v1.2.0
+my-app/
+├── contracts/          # Compact smart contract + TypeScript witnesses + tests
+│   ├── src/
+│   │   ├── bboard.compact       # Contract source (Compact language)
+│   │   ├── index.ts             # Compiled contract exports
+│   │   └── witnesses.ts         # Private state witness functions
+│   └── tests/                   # Contract test suite (Vitest)
+├── api/                # Shared BBoardAPI class (deploy, post, takeDown)
+│   └── src/
+│       ├── index.ts             # API implementation
+│       └── common-types.ts      # Shared types
+├── cli/                # Command-line deployment and interaction tool
+│   └── src/
+│       ├── launcher/            # Entry points (deploy, standalone, preview, preprod)
+│       ├── wallet-store.ts      # Persistent wallet seed storage
+│       └── wallet-utils.ts      # Wallet sync and funding utilities
+├── web/                # Next.js frontend (App Router + Turbopack)
+│   ├── app/                     # Pages and layouts
+│   ├── components/              # UI components
+│   ├── services/midnight/       # Wallet and board management
+│   └── config/                  # Environment and network configuration
+├── infra/              # Build and operations tooling
+│   ├── config/versions.json     # Pinned image versions and ports
+│   ├── docker/                  # Docker Compose files
+│   ├── patches/                 # Dependency patches
+│   └── scripts/                 # Setup, deploy, doctor, docker lifecycle
+├── setup.sh            # One-command zero-config bootstrap
+├── Dockerfile          # Multi-stage build (dev + production targets)
+└── package.json        # Workspace root (npm workspaces)
 ```
 
-This makes project generation **deterministic and reproducible**: re-running an older
-`create-midnight` version always produces the same starting point, and template
-changes on `main` can never silently break a released CLI version.
+### Key directories
 
-If the matching tag doesn't exist in the template repository, the CLI fails loudly
-instead of silently falling back to `main`:
+| Directory | Purpose |
+| --- | --- |
+| `contracts/` | Smart contract source in Compact, compiled artifacts, TypeScript witnesses, and tests |
+| `api/` | Shared API layer used by both the CLI and the web frontend |
+| `cli/` | Deployment tooling, wallet management, and interactive contract interaction |
+| `web/` | Next.js 15 frontend with App Router, wallet integration, and board UI |
+| `infra/` | Docker Compose, build scripts, deploy orchestration, and environment tooling |
+| `infra/scripts/` | `doctor.mjs`, `deploy.mjs`, Docker lifecycle, and setup helpers |
+| `infra/config/` | Single source of truth for pinned image versions and port assignments |
 
-```
-✖ Compatible template version not found.
+---
 
-  Expected:   v1.2.0
-  Repository: wolf1276/Midnight-starter-template
-```
+## Development Workflow
 
-When this happens: upgrade `create-midnight` to a version whose tag exists, or (for
-development only) pass `--ref` to bypass version locking entirely:
+### Common commands
 
 ```bash
-npx create-midnight my-app --ref main          # track the latest, unreleased template
-npx create-midnight my-app --ref develop       # a feature branch
-npx create-midnight my-app --ref v1.1.0        # an explicit different tag
+npm run setup        # Full environment bootstrap (idempotent — safe to re-run)
+npm run doctor       # Check environment health
+npm run dev          # Start the frontend dev server (Turbopack)
+npm run deploy       # Deploy a contract to Preview or Preprod
+npm run test         # Run tests across all workspaces
+npm run build:all    # Build contract, API, and CLI in order
+npm run wallet:reset # Reset your local deployment wallet
 ```
 
-`--ref` is **not** intended for end users scaffolding production apps — it trades away
-the reproducibility guarantee above. `CREATE_MIDNIGHT_LOCAL_TEMPLATE` (see
-[Local development](#local-development)) is unaffected by any of this and continues to
-bypass ref resolution entirely, since it reads a template straight off disk.
+### What each command does
 
-## Templates
+| Command | Description |
+| --- | --- |
+| `npm run setup` | Installs prerequisites, dependencies, builds contracts, starts Docker services, runs health checks. Fully idempotent. |
+| `npm run doctor` | Verifies Node.js, Docker, ports, services, build artifacts, and configuration. Reports a health score with fix suggestions. |
+| `npm run dev` | Starts the Next.js frontend at [localhost:3000](http://localhost:3000) with Turbopack hot reload. |
+| `npm run deploy` | Builds the contract if needed, funds a wallet from the faucet, generates a ZK proof, and deploys to the selected network. |
+| `npm run test` | Runs Vitest across all workspaces (contracts, api, cli, web). |
+| `npm run build:all` | Compiles the Compact contract, then builds the API and CLI packages. |
+| `npm run wallet:reset` | Clears the stored wallet seed so the next deploy creates a fresh wallet. |
 
-The CLI is not coupled to a single template. Additional templates can be registered
-in `src/downloader.ts` (`TEMPLATE_REGISTRY`) and selected with `--template <name>`,
-e.g. `--template contract` or `--template dashboard`, without changing any
-download/scaffold/install logic. Every registered template is version-locked the same
-way, against its own repository's tags.
-
-## Local development
+### Docker lifecycle
 
 ```bash
-cd create-midnight
+npm run docker:start       # Start the full stack (node + indexer + proof-server + web)
+npm run docker:stop        # Stop all containers (preserves volumes)
+npm run docker:reset       # Stop everything and wipe local chain data
+
+npm run blockchain:start   # Start node, indexer, and proof-server only
+npm run blockchain:stop    # Stop blockchain services
+npm run blockchain:reset   # Force-remove blockchain containers
+```
+
+---
+
+## Doctor
+
+Run `npm run doctor` to verify your entire environment. Doctor checks everything needed to build, run, and deploy.
+
+### What Doctor checks
+
+| Category | Checks |
+| --- | --- |
+| **Toolchain** | Node.js version (>= 24), npm, Docker CLI, Docker daemon, Docker Compose plugin, Docker memory (>= 4 GB), Compact CLI, Compact compiler toolchain, internet connectivity, disk space (>= 5 GB), filesystem permissions |
+| **Build** | Contract artifacts compiled, CLI built, API package built, `web/.env.local` present, `node_modules` installed |
+| **Services** | Local Docker services running (node, indexer, proof-server), Node RPC health (`:9944`), Indexer reachable (`:8088`), Proof server reachable (`:6300`) |
+| **Environment** | Required ports free or owned by this project, Git hooks installed, indexer secret configured, pinned image versions match |
+
+### Health score
+
+Doctor outputs a health summary with a percentage score. A failing check includes:
+
+- What was checked
+- What went wrong
+- The exact command to fix it
+
+```bash
+$ npm run doctor
+
+Toolchain
+  ✓ Node.js 24.11.1
+  ✓ npm 10.9.0
+  ✓ Docker CLI
+  ✓ Docker daemon
+  ✓ Docker Compose plugin
+  ✓ Compact CLI
+  ✓ Compact toolchain
+  ✓ Internet
+  ✓ Disk space
+  ✓ Filesystem permissions
+
+Build
+  ✓ Contract compiled
+  ✓ CLI built
+  ✓ API built
+  ✓ web/.env.local
+  ✓ node_modules
+
+Services
+  ✓ Docker services running
+  ✓ Node RPC healthy
+  ✓ Indexer reachable
+  ✓ Proof server reachable
+
+Health: 100% — all checks passed
+```
+
+---
+
+## Docker
+
+The local development stack runs inside Docker containers. Everything is automatic — `setup.sh` and `npm run setup` handle pulling images, starting services, and waiting for health checks.
+
+### Services
+
+| Service | Image | Port | Purpose |
+| --- | --- | --- | --- |
+| **node** | `midnightntwrk/midnight-node` | `9944` | Midnight blockchain node (dev mode) |
+| **indexer** | `midnightntwrk/indexer-standalone` | `8088` | Chain indexer with GraphQL API |
+| **proof-server** | `midnightntwrk/proof-server` | `6300` | ZK proof generation server |
+| **web** | Built from `Dockerfile` | `3000` | Next.js frontend (started with `--profile web`) |
+
+### Automatic behavior
+
+- **Startup:** Services start automatically during `npm run setup`. The node must be healthy before the indexer starts.
+- **Cleanup:** `npm run docker:stop` tears down containers while preserving chain data. `npm run docker:reset` wipes everything.
+- **Project isolation:** Each scaffolded project gets its own `COMPOSE_PROJECT_NAME`, so multiple Midnight projects can run side by side without container or network name collisions.
+- **Port ownership:** Doctor verifies that ports are either free or owned by your project's Docker Compose stack — not just that something is listening.
+
+---
+
+## Deploying
+
+Deploy your contract to a Midnight testnet with a single command.
+
+### Networks
+
+| Network | Purpose | Faucet |
+| --- | --- | --- |
+| **Preview** | Fast iteration, unstable state | [preview faucet](https://midnight-tmnight-preview.nethermind.dev/) |
+| **Preprod** | Production-like testing | [preprod faucet](https://midnight-tmnight-preprod.nethermind.dev/) |
+
+### Deploy flow
+
+```bash
+npm run deploy
+```
+
+1. **Selects network** — prompts for Preview or Preprod (remembers your last choice)
+2. **Ensures Docker** — starts Docker if it's not running, recovers from port conflicts
+3. **Starts services** — brings up the local node, indexer, and proof server
+4. **Builds** — compiles the contract and CLI if not already built
+5. **Creates wallet** — generates or loads a local wallet from `contracts/.midnight/`
+6. **Funds wallet** — requests tokens from the network faucet (waits up to 15 minutes if needed)
+7. **Generates proof** — creates a ZK proof for the deploy transaction
+8. **Deploys** — submits the transaction and verifies it on-chain
+9. **Updates frontend** — writes the contract address to `web/.env.local`
+
+After deployment, open [localhost:3000](http://localhost:3000) with the Lace or 1AM wallet extension to interact with your contract.
+
+### Wallet management
+
+```bash
+npm run wallet:reset    # Clear stored wallet seed (next deploy creates a new wallet)
+```
+
+Wallet seeds are stored at `contracts/.midnight/{network}-wallet.json` with restricted permissions (`0o600`). These files are gitignored.
+
+---
+
+## Troubleshooting
+
+### Node.js version
+
+Doctor requires Node.js 24+. If you have an older version:
+
+```bash
+# Using nvm
+nvm install 24
+nvm use 24
+
+# Using fnm
+fnm install 24
+fnm use 24
+
+# Using volta
+volta install node@24
+```
+
+`setup.sh` can also install Node.js automatically if nvm, fnm, or volta is already present.
+
+### Docker not running
+
+```bash
+# macOS / Windows: open Docker Desktop
+open -a Docker
+
+# Linux (systemd)
+sudo systemctl start docker
+```
+
+Then re-run `npm run doctor` to verify.
+
+### Ports already in use
+
+Doctor identifies which process holds the conflicting port. Common resolutions:
+
+```bash
+# Stop your own project's containers
+npm run docker:stop
+
+# Check what's using the port (replace 9944 with the conflicting port)
+lsof -i :9944
+kill <PID>
+```
+
+If another Midnight project is using the ports, Doctor will offer to stop it automatically.
+
+### Faucet empty
+
+Testnet faucets can run dry. If wallet funding fails:
+
+- Wait a few minutes and retry
+- Switch to a different network (`--network preview` vs `--network preprod`)
+- Check the [Midnight Discord](https://discord.gg/midnight-network) for faucet status
+
+### Permission issues
+
+```bash
+# Fix setup.sh permissions
+chmod +x setup.sh
+
+# Fix node_modules permissions (Linux)
+sudo chown -R $(whoami) node_modules
+```
+
+### Docker Desktop
+
+- Ensure Docker Desktop is running and shows "Engine running"
+- Allocate at least 4 GB of memory in Docker Desktop Settings > Resources
+- On macOS, ensure Virtualization Framework is enabled
+
+---
+
+## FAQ
+
+**Do I need Docker?**
+
+Yes. The local blockchain node, indexer, and proof server run as Docker containers. Docker Desktop (macOS/Windows) or Docker Engine (Linux) is required.
+
+**Can I use Podman?**
+
+Not yet. The tooling uses `docker compose` commands. Podman compatibility is planned.
+
+**Why Node 24?**
+
+Midnight's Compact compiler and the runtime toolchain require Node.js 24 or newer.
+
+**How do I update a project?**
+
+Re-run setup to get the latest compatible dependencies:
+
+```bash
+npm run setup
+```
+
+To upgrade to a new template version, compare your project against the latest template and merge changes manually — there's no built-in upgrade command yet.
+
+**Can I deploy without Docker?**
+
+No. Deployment requires the local proof server, which runs as a Docker container.
+
+**How do I reset everything?**
+
+```bash
+npm run docker:reset     # Wipe local chain data
+npm run wallet:reset     # Clear wallet seeds
+rm -rf node_modules      # Remove installed dependencies
+npm run setup            # Rebuild from scratch
+```
+
+**Which networks are supported?**
+
+Preview (for fast iteration) and Preprod (for production-like testing). Mainnet support will be added when the network launches.
+
+**How do I deploy a different contract?**
+
+Replace `contracts/src/bboard.compact` with your own Compact source, update the witnesses in `contracts/src/witnesses.ts`, and re-run `npm run deploy`.
+
+---
+
+## Contributing
+
+### Development setup
+
+```bash
+git clone https://github.com/wolf1276/Midnight-starter-template.git
+cd Midnight-starter-template/create-midnight
 npm install
 npm run dev -- my-test-app --verbose
 ```
 
-To iterate without hitting the network, point at a local template checkout:
+To test against a local template without hitting the network:
 
 ```bash
 CREATE_MIDNIGHT_LOCAL_TEMPLATE=/path/to/template npm run dev -- my-test-app
 ```
 
-This bypasses version locking entirely (no ref is resolved or requested), so it works
-regardless of whether a matching template tag exists yet. To exercise the real
-version-locked download path against `main` during development, use `--ref main`
-instead of the local override.
-
-## Testing
+### Running tests
 
 ```bash
 npm run typecheck
 npm run build
-npm test              # fast, offline: runs the CLI against a local fixture template
-                       # + version-lock unit tests with a mocked network
-CREATE_MIDNIGHT_TEST_NETWORK=1 npm test   # also exercises the real GitHub download path,
-                       # including the current "no matching tag" error state
+npm test
+
+# Also exercise the real GitHub download path
+CREATE_MIDNIGHT_TEST_NETWORK=1 npm test
 ```
 
-> **Note for maintainers:** once the template repository is tagged to match a released
-> CLI version (e.g. `v1.0.0`), update the real-network test in
-> `tests/cli.integration.test.ts` that currently asserts "no matching tag exists yet" —
-> it should be replaced with (or supplemented by) a test that scaffolds successfully
-> without `--ref`, proving the default version-locked path works end-to-end.
-
-## Architecture
+### Architecture
 
 ```
 src/
-├── cli.ts        # Entry point: arg parsing + orchestration
-├── prompts.ts     # Interactive prompts (@clack/prompts)
-├── downloader.ts  # Template registry + version-locked ref resolution + download/extract
-├── version.ts     # Reads the CLI's own version (drives the default template tag)
-├── scaffold.ts    # Post-download project configuration
-├── installer.ts   # Dependency installation
-├── git.ts         # Git init + initial commit
-├── setup.ts       # Runs the template's own `npm run setup`
-├── errors.ts      # Typed errors + user-facing recovery messages
-├── logger.ts      # Banner/section helpers
-└── utils.ts       # Shell exec, package-manager detection, name validation
+├── cli.ts          # Entry point: arg parsing + orchestration
+├── prompts.ts      # Interactive prompts (@clack/prompts)
+├── downloader.ts   # Template registry + version-locked ref resolution + download/extract
+├── version.ts      # Reads the CLI's own version (drives the default template tag)
+├── scaffold.ts     # Post-download project configuration
+├── installer.ts    # Dependency installation
+├── git.ts          # Git init + initial commit
+├── setup.ts        # Runs the template's own `npm run setup`
+├── errors.ts       # Typed errors + user-facing recovery messages
+├── logger.ts       # Banner/section helpers
+└── utils.ts        # Shell exec, package-manager detection, name validation
 ```
 
-## FAQ
+### Submitting PRs
 
-**Which package managers are supported?**
-npm, pnpm, Yarn, and Bun. npm is used by default — see [Package
-manager](#package-manager); use `--use-pnpm` / `--use-yarn` / `--use-bun` to use a
-different one.
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Run `npm run typecheck && npm run build && npm test`
+5. Submit a pull request
 
-**What Node version do I need?**
-Node 18.18 or newer (see `engines` in `package.json`).
+See [CONTRIBUTING.md](../CONTRIBUTING.md) for full guidelines.
 
-**Can I use this without installing dependencies or running setup?**
-Yes — pass `--no-install`. Note that `--setup` requires `--install`; the CLI warns
-and skips setup rather than failing if you request setup without installation.
+---
 
-**Does `create-midnight` ever scaffold from `main`?**
-No, by default. Every release is version-locked to a matching template tag (see
-[Version locking](#version-locking)). `main` is only used if you explicitly pass
-`--ref main`.
+## License
 
-**How do I add a new template?**
-Register it in `src/downloader.ts` (`TEMPLATE_REGISTRY`) with an `owner`/`repo`
-(and optional `subdir`), then select it with `--template <name>`. No other code
-needs to change — download, version locking, and extraction are template-agnostic.
-
-**Is it safe to run non-interactively in CI?**
-Yes — pass `-y`/`--yes` plus explicit flags for every choice (`--network`,
-`--git`/`--no-git`, `--install`/`--no-install`, `--setup`/`--no-setup`) so no
-prompt blocks on stdin.
-
-## Troubleshooting
-
-**`Compatible template version not found`**
-The template repository doesn't yet have a tag matching this CLI's version. Either
-upgrade the CLI (`npm install -g create-midnight@latest`) or, for development only,
-scaffold from a branch with `--ref main`. See [Version locking](#version-locking).
-
-**`A file or directory already exists at "..."`**
-Choose a different project name, or remove/rename the existing directory.
-
-**Git is not installed / initialization fails**
-Install Git, or re-run with `--no-git` to scaffold without a repository. A failed
-*commit* (e.g. missing `git config user.name`/`user.email`) doesn't fail the whole
-run — the project is still created; initialize Git manually afterwards if needed.
-
-**Dependency installation fails**
-Re-run with `--verbose` to see the full installer output. Common causes: no network
-access, a missing package manager binary (`npm`/`pnpm`/`yarn`/`bun` not on `PATH`),
-or insufficient disk space/permissions — the CLI's error message tells you which.
-
-**I don't see a stack trace and need one**
-Every command accepts `--verbose`, which prints the full error output (including
-the underlying stack/cause) instead of just the friendly recovery message.
-
-**I want to test against a template on disk, without hitting the network**
-Set `CREATE_MIDNIGHT_LOCAL_TEMPLATE=/path/to/template`. This bypasses both the
-network download and version-lock ref resolution entirely.
-
-## Publishing
-
-Maintainer workflow for cutting a release:
-
-1. Update `CHANGELOG.md` with the new version's notes (follow
-   [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)).
-2. Bump the version in `package.json` (`npm version patch|minor|major`, or edit
-   directly — this repo does not use `npm version`'s git-tagging behavior since
-   the package lives in a subdirectory).
-3. Verify everything is release-ready:
-   ```bash
-   npm run typecheck
-   npm run build
-   npm test
-   npm pack --dry-run   # confirm: dist/ + README/LICENSE/CHANGELOG only, no src/tests
-   ```
-4. Tag the corresponding template repository release (`v<version>`) — the CLI's
-   version-locked default depends on that tag existing before publishing.
-5. Publish:
-   ```bash
-   npm login
-   npm publish --access public
-   ```
-6. Verify on the registry: `npm view create-midnight version`, then smoke-test with
-   `npx create-midnight@latest smoke-test-app`.
-
-### Release checklist
-
-- [ ] `CHANGELOG.md` updated
-- [ ] `package.json` version bumped
-- [ ] `npm run typecheck` passes
-- [ ] `npm run build` passes
-- [ ] `npm test` passes
-- [ ] `npm pack --dry-run` contents look correct (no `src/`, `tests/`, or dev config)
-- [ ] Matching template tag (`v<version>`) exists upstream
-- [ ] `npm publish --access public`
-- [ ] Post-publish smoke test via `npx create-midnight@latest`
+[Apache 2.0](../LICENSE)
