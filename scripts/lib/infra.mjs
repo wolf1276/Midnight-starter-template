@@ -70,7 +70,7 @@ export async function ensureDockerRunning(fmt) {
   fmt.ok('Docker is running.');
 }
 
-function ensureIndexerSecret(rootDir, fmt) {
+export function ensureIndexerSecret(rootDir, fmt = { info: () => {} }) {
   const envFile = resolve(rootDir, 'docker', '.env');
   if (existsSync(envFile) && /^INDEXER_SECRET=.+$/m.test(readFileSync(envFile, 'utf-8'))) return;
   mkdirSync(dirname(envFile), { recursive: true });

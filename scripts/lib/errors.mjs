@@ -512,7 +512,10 @@ export function classifyError(e, retryCommand) {
       { cause },
     );
   }
-  if (/\.env.*(missing|not found|ENOENT)|ENOENT.*\.env/i.test(message)) {
+  // `(?![a-zA-Z])` after `.env` keeps this from false-matching "...indexer.environment..."
+  // (e.g. docker compose variable-interpolation errors), which contains ".env" as a
+  // substring of "environment" but isn't about a missing .env file at all.
+  if (/\.env(?![a-zA-Z]).*(missing|not found|ENOENT)|ENOENT.*\.env(?![a-zA-Z])/i.test(message)) {
     return new FilesystemError(
       {
         title: 'Missing .env File',

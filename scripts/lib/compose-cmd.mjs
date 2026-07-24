@@ -6,6 +6,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as ui from './ui.mjs';
 import { classifyError, printCliError } from './errors.mjs';
+import { ensureIndexerSecret } from './infra.mjs';
 import { checkRequiredPorts, printPortConflicts } from './ports.mjs';
 import { tryStartDocker } from './recovery.mjs';
 
@@ -50,6 +51,12 @@ export async function runCompose(label, args, { checkPorts = false, requireDaemo
       process.exit(1);
     }
   }
+
+  // docker-compose.yml interpolates INDEXER_SECRET from docker/.env for every command
+  // (up, stop, down, ps, ...), not just `up` — so this must run unconditionally here,
+  // not only on the `checkPorts` (start) path. setup.sh generates this file too; this
+  // covers anyone who runs blockchain:*/docker:* directly without running setup.sh.
+  ensureIndexerSecret(rootDir, { info: ui.info });
 
   try {
     execSync(`docker compose -f ${composeFile} ${args}`, {
