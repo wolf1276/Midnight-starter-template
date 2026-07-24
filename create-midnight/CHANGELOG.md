@@ -5,6 +5,22 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.7] - 2026-07-24
+
+### Added
+
+- Docker memory preflight now offers to auto-raise Docker Desktop's memory
+  allocation (via `settings-store.json` + restart) when it's set too low,
+  instead of only warning. Gated behind interactive confirmation; falls
+  back to the existing warning on native dockerd, non-interactive shells,
+  or if remediation fails.
+
+### Fixed
+
+- `doctor.mjs`'s preflight check now recognizes the Compact CLI's escaped
+  `\u{2192}` arrow glyph (printed when `compact list` runs without a TTY),
+  so it correctly detects the active toolchain instead of reporting none.
+
 ## [1.2.6] - 2026-07-24
 
 ### Fixed
