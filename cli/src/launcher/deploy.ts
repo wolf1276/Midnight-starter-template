@@ -30,6 +30,7 @@ import {
   walletFileDisplayPath,
 } from '../wallet-store.js';
 import { WalletError, DeploymentError, runMain } from '../errors.js';
+import { buildExplorerUrl } from '../explorer.js';
 
 globalThis.WebSocket = WebSocket as unknown as typeof globalThis.WebSocket;
 
@@ -327,7 +328,7 @@ async function main() {
   }
   verifyStep.succeed('Deployment verified — contract is live and queryable');
 
-  const explorerUrl = config.explorerUrl ? config.explorerUrl.replace('{contractAddress}', address) : '';
+  const explorerUrl = buildExplorerUrl(config.explorerUrl, address);
 
   logger.info(`Deployed contract at address: ${address}`);
   // Machine-readable result consumed by infra/scripts/deploy/deploy.mjs to write deployment.json
