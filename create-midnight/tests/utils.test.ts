@@ -56,6 +56,15 @@ describe('validateProjectName', () => {
     expect(validateProjectName('.hidden-app').valid).toBe(false);
     expect(validateProjectName('_private-app').valid).toBe(false);
   });
+
+  it('rejects names containing path separators to prevent scaffolding outside the target directory', () => {
+    expect(validateProjectName('../evil').valid).toBe(false);
+    expect(validateProjectName('../../etc/foo').valid).toBe(false);
+    expect(validateProjectName('foo/bar').valid).toBe(false);
+    expect(validateProjectName('foo\\bar').valid).toBe(false);
+    expect(validateProjectName('.').valid).toBe(false);
+    expect(validateProjectName('..').valid).toBe(false);
+  });
 });
 
 describe('toPackageName', () => {

@@ -1,6 +1,5 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import path from 'node:path';
 import validateNpmName from 'validate-npm-package-name';
 import { CLIError } from './errors.js';
 import { verbose } from './logger.js';
@@ -93,7 +92,14 @@ export function validateProjectName(rawName: string): ProjectNameValidation {
     return { valid: false, problems: ['Project name cannot be empty.'] };
   }
 
-  const result = validateNpmName(path.basename(path.resolve(name)));
+  if (name.includes('/') || name.includes('\\') || name === '.' || name === '..') {
+    return {
+      valid: false,
+      problems: ['Project name cannot contain path separators or be "." or "..".']
+    };
+  }
+
+  const result = validateNpmName(name);
   if (!result.validForNewPackages) {
     return {
       valid: false,
