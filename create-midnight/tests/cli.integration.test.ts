@@ -31,6 +31,10 @@ function runCli(args: string[], env: Record<string, string> = {}) {
     env: {
       ...process.env,
       CREATE_MIDNIGHT_LOCAL_TEMPLATE: fixtureTemplate,
+      // Force plain output so stdout assertions are deterministic across platforms —
+      // some CI runners (e.g. windows-latest) set FORCE_COLOR, which would otherwise
+      // inject ANSI codes between labels and values and break the \s+ matchers below.
+      NO_COLOR: '1',
       ...env
     },
     encoding: 'utf8'
