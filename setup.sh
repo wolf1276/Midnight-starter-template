@@ -297,12 +297,23 @@ else
   ok "infra/docker/.env already exists (left untouched)"
 fi
 
-info "⏳ Pulling images (this can take a while on first run)..."
-node infra/scripts/setup/run-step.mjs "docker compose pull" "$@" -- docker compose -f infra/docker/docker-compose.yml pull node indexer proof-server
-ok "Docker images pulled"
+set +e
+node infra/scripts/setup/docker-recover.mjs
+DOCKER_RECOVER_STATUS=$?
+set -e
 
-node infra/scripts/setup/run-step.mjs "docker compose up" "$@" -- docker compose -f infra/docker/docker-compose.yml up -d node indexer proof-server
-ok "Containers started (node, indexer, proof-server)"
+if [ "$DOCKER_RECOVER_STATUS" -eq 1 ]; then
+  die "Required port(s) are held by something outside this project — see diagnostics above."
+elif [ "$DOCKER_RECOVER_STATUS" -eq 3 ]; then
+  : # already running — skip pull/up entirely, fall through to health checks
+else
+  info "⏳ Pulling images (this can take a while on first run)..."
+  node infra/scripts/setup/run-step.mjs "docker compose pull" "$@" -- docker compose -f infra/docker/docker-compose.yml pull node indexer proof-server
+  ok "Docker images pulled"
+
+  node infra/scripts/setup/run-step.mjs "docker compose up" "$@" -- docker compose -f infra/docker/docker-compose.yml up -d node indexer proof-server
+  ok "Containers started (node, indexer, proof-server)"
+fi
 
 step "9/${TOTAL_STEPS} Waiting for services and verifying RPC connectivity"
 # Waits for the HTTP server at $url to respond at all. `require_2xx=1` additionally requires a
