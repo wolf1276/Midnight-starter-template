@@ -1,0 +1,94 @@
+name: create-midnight
+
+on:
+  push:
+    paths:
+      - "create-midnight/**"
+      - ".github/workflows/create-midnight.yaml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "create-midnight/**"
+      - ".github/workflows/create-midnight.yaml"
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: create-midnight
+
+jobs:
+  verify:
+    name: verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 #v6.0.3
+
+      # NOTE: pin this to the same commit-SHA convention as .github/workflows/ci.yaml
+      # (actions/setup-node@<sha> #v5) before merging — left as a version tag here
+      # since the exact SHA wasn't verified in this pass.
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Run unit + local-fixture integration tests
+        run: npm run test
+
+      - name: Scaffold a project against the real GitHub template
+        env:
+          CREATE_MIDNIGHT_TEST_NETWORK: "1"
+        run: npm run test
+
+      - name: Scaffold a project via the built CLI (smoke test)
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp_dir="$(mktemp -d)"
+          cd "$tmp_dir"
+          node "${{ github.workspace }}/create-midnight/dist/cli.js" smoke-app --yes --no-install --no-setup --no-git --verbose
+          test -f smoke-app/package.json
+          test -f smoke-app/README.md
+          test -f smoke-app/web/.env.local
+
+      - name: Validate npm package contents
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          npm pack --dry-run
+          npm pack
+          tar -tzf create-midnight-*.tgz
+
+      # NOTE: pin to a verified SHA (see note above) before merging.
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: create-midnight-logs-${{ matrix.os }}
+          path: |
+            create-midnight/logs/**
+            create-midnight/*.tgz
+          if-no-files-found: ignore

@@ -1,0 +1,16 @@
+{
+  "name": "midnight-starter-template",
+  "version": "9.9.9",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wolf1276/Midnight-starter-template.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wolf1276/Midnight-starter-template/issues"
+  },
+  "homepage": "https://github.com/wolf1276/Midnight-starter-template#readme",
+  "scripts": {
+    "setup": "node -e \"console.log('setup ran')\""
+  }
+}

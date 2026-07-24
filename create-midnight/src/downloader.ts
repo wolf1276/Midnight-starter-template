@@ -5,32 +5,52 @@ import { pipeline } from 'node:stream/promises';
 import * as tar from 'tar';
 import { CLIError } from './errors.js';
 import { verbose } from './logger.js';
+import { getCliVersion } from './version.js';
+
+export type RefSource = 'version-lock' | 'override';
 
 export interface TemplateSource {
   name: string;
   owner: string;
   repo: string;
   ref: string;
+  refSource: RefSource;
   /** Subdirectory within the repo that contains this template, if not the repo root. */
   subdir?: string;
 }
 
+type TemplateRegistryEntry = Pick<TemplateSource, 'owner' | 'repo' | 'subdir'>;
+
 /**
  * Registry of available templates. New templates can be added here (or backed by their
  * own repos) without changing any download/scaffold logic.
+ *
+ * No `ref` is stored here: by default every template is scaffolded from the Git tag
+ * matching this CLI's own version (e.g. create-midnight@1.2.0 -> tag v1.2.0), so that
+ * published CLI versions always produce a deterministic, reproducible result. Use
+ * `--ref` to scaffold from a different branch/tag/commit (development only).
  */
-const TEMPLATE_REGISTRY: Record<string, Omit<TemplateSource, 'name'>> = {
+const TEMPLATE_REGISTRY: Record<string, TemplateRegistryEntry> = {
   starter: {
     owner: 'wolf1276',
-    repo: 'Midnight-starter-template',
-    ref: 'main'
+    repo: 'Midnight-starter-template'
   }
   // Future templates, e.g.:
-  // contract: { owner: 'wolf1276', repo: 'Midnight-starter-template', ref: 'main', subdir: 'contracts' },
-  // dashboard: { owner: 'wolf1276', repo: 'midnight-dashboard-template', ref: 'main' },
+  // contract: { owner: 'wolf1276', repo: 'Midnight-starter-template', subdir: 'contracts' },
+  // dashboard: { owner: 'wolf1276', repo: 'midnight-dashboard-template' },
 };
 
-export function resolveTemplate(templateName: string): TemplateSource {
+/**
+ * Resolves which template + Git ref to scaffold from.
+ *
+ * By default the ref is version-locked: it's derived from the CLI's own version
+ * (`v${cliVersion}`), so create-midnight@1.2.0 always scaffolds
+ * Midnight-starter-template@v1.2.0, never whatever happens to be on `main`.
+ *
+ * `refOverride` (the `--ref` flag) bypasses version locking entirely and is intended
+ * for development use only (tracking `main`, a feature branch, an unreleased tag, etc.).
+ */
+export function resolveTemplate(templateName: string, refOverride?: string): TemplateSource {
   const entry = TEMPLATE_REGISTRY[templateName];
   if (!entry) {
     const available = Object.keys(TEMPLATE_REGISTRY).join(', ');
@@ -39,7 +59,12 @@ export function resolveTemplate(templateName: string): TemplateSource {
       `Unknown template "${templateName}". Available templates: ${available}.`
     );
   }
-  return { name: templateName, ...entry };
+
+  if (refOverride) {
+    return { name: templateName, ...entry, ref: refOverride, refSource: 'override' };
+  }
+
+  return { name: templateName, ...entry, ref: `v${getCliVersion()}`, refSource: 'version-lock' };
 }
 
 /**
@@ -67,9 +92,17 @@ export async function downloadTemplate(source: TemplateSource, destDir: string):
   }
 
   if (!response.ok || !response.body) {
+    if (response.status === 404 && source.refSource === 'version-lock') {
+      throw new CLIError(
+        'TEMPLATE_VERSION_NOT_FOUND',
+        `Compatible template version not found.\n\n` +
+          `  Expected:   ${source.ref}\n` +
+          `  Repository: ${source.owner}/${source.repo}`
+      );
+    }
     throw new CLIError(
       'NETWORK_FAILURE',
-      `Failed to download template (HTTP ${response.status} ${response.statusText}).`
+      `Failed to download template (HTTP ${response.status} ${response.statusText}) for ref "${source.ref}".`
     );
   }
 

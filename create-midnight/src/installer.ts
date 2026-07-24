@@ -4,7 +4,8 @@ import { commandExists, run, type PackageManager } from './utils.js';
 const INSTALL_ARGS: Record<PackageManager, string[]> = {
   npm: ['install'],
   pnpm: ['install'],
-  yarn: ['install']
+  yarn: ['install'],
+  bun: ['install']
 };
 
 export async function installDependencies(targetDir: string, pm: PackageManager): Promise<void> {

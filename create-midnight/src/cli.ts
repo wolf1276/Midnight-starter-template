@@ -13,7 +13,7 @@ import { initGitRepo } from './git.js';
 import { runProjectSetup } from './setup.js';
 import { CLIError, printError } from './errors.js';
 import { assertTargetAvailable, detectPackageManager } from './utils.js';
-import { setVerbose } from './logger.js';
+import { setVerbose, verbose } from './logger.js';
 
 const program = new Command();
 
@@ -22,6 +22,10 @@ program
   .description('Scaffold a production-ready Midnight DApp')
   .argument('[project-name]', 'Name of the project / target directory')
   .option('--template <name>', 'Template to scaffold', 'starter')
+  .option(
+    '--ref <ref>',
+    'Override the version-locked template ref (branch/tag/commit), e.g. main, develop, v1.1.0. Development use only — bypasses reproducibility guarantees.'
+  )
   .option('--network <network>', 'Default network: preview | preprod')
   .option('--git', 'Initialize a git repository')
   .option('--no-git', 'Skip git initialization')
@@ -29,6 +33,10 @@ program
   .option('--no-install', 'Skip dependency installation')
   .option('--setup', 'Run project setup after installation')
   .option('--no-setup', 'Skip project setup')
+  .option('--use-npm', 'Force npm as the package manager')
+  .option('--use-pnpm', 'Force pnpm as the package manager')
+  .option('--use-yarn', 'Force yarn as the package manager')
+  .option('--use-bun', 'Force bun as the package manager')
   .option('-y, --yes', 'Accept defaults for all prompts', false)
   .option('--verbose', 'Print full error output for debugging', false)
   .parse(process.argv);
@@ -59,8 +67,27 @@ async function main(): Promise<void> {
   const answers = await collectAnswers(flags);
   assertTargetAvailable(answers.targetDir);
 
-  const templateSource = resolveTemplate(answers.template);
-  const pm = detectPackageManager();
+  const templateSource = resolveTemplate(answers.template, opts.ref);
+  if (templateSource.refSource === 'override') {
+    console.log(
+      pc.yellow(
+        `  ${logSymbols.warning} Using --ref override "${templateSource.ref}" instead of the version-locked template. This is for development only and is not guaranteed to be reproducible.`
+      )
+    );
+  } else {
+    verbose(`Scaffolding from version-locked template ref ${templateSource.ref}`);
+  }
+
+  const pmOverride = opts.useNpm
+    ? 'npm'
+    : opts.usePnpm
+      ? 'pnpm'
+      : opts.useYarn
+        ? 'yarn'
+        : opts.useBun
+          ? 'bun'
+          : undefined;
+  const pm = detectPackageManager(pmOverride);
 
   console.log('');
   console.log(pc.dim('━'.repeat(28)));
@@ -95,6 +122,8 @@ async function main(): Promise<void> {
     await step('Running setup', () => runProjectSetup(answers.targetDir, pm), {
       successLabel: 'Environment ready'
     });
+  } else if (answers.runSetup && !answers.installDeps) {
+    console.log(`  ${logSymbols.warning} ${pc.yellow('Skipping setup: --setup requires dependencies to be installed (remove --no-install).')}`);
   }
 
   console.log('');

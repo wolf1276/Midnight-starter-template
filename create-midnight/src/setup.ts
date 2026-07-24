@@ -5,7 +5,8 @@ import type { PackageManager } from './utils.js';
 const SETUP_ARGS: Record<PackageManager, string[]> = {
   npm: ['run', 'setup'],
   pnpm: ['run', 'setup'],
-  yarn: ['setup']
+  yarn: ['setup'],
+  bun: ['run', 'setup']
 };
 
 export async function runProjectSetup(targetDir: string, pm: PackageManager): Promise<void> {

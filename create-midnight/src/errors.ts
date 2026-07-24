@@ -7,6 +7,7 @@ export type ErrorCode =
   | 'GIT_MISSING'
   | 'NPM_MISSING'
   | 'NETWORK_FAILURE'
+  | 'TEMPLATE_VERSION_NOT_FOUND'
   | 'INSTALL_FAILED'
   | 'SETUP_FAILED'
   | 'PERMISSION_DENIED'
@@ -24,15 +25,21 @@ const RECOVERY: Record<ErrorCode, string[]> = {
   ],
   GIT_MISSING: [
     'Install Git from https://git-scm.com/downloads, or',
-    'Re-run with --skip-git to scaffold without a repository.'
+    'Re-run with --no-git to scaffold without a repository.'
   ],
   NPM_MISSING: [
     'Install Node.js (which bundles npm) from https://nodejs.org, or',
-    'Re-run with --skip-install and install dependencies manually.'
+    'Re-run with --no-install and install dependencies manually.'
   ],
   NETWORK_FAILURE: [
     'Check your internet connection and try again.',
     'If you are behind a proxy, ensure npm/git are configured to use it.'
+  ],
+  TEMPLATE_VERSION_NOT_FOUND: [
+    'This CLI version is locked to a specific template release for reproducible scaffolds.',
+    'Upgrade the CLI: npm install -g create-midnight@latest, or',
+    'For development only, override the ref: --ref main (tracks the latest, unreleased template).',
+    'See available tags: https://github.com/wolf1276/Midnight-starter-template/tags'
   ],
   INSTALL_FAILED: [
     `Try running the install manually inside the project: ${pc.cyan('npm install')}`,

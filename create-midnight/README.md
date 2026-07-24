@@ -15,7 +15,8 @@ npm create midnight@latest my-app
 2. Downloads the official Midnight starter template.
 3. Configures the project — renames `package.json`, writes `web/.env.local` for the
    selected network, and strips template-only files.
-4. Installs dependencies with your detected package manager (npm/pnpm/yarn).
+4. Installs dependencies with your detected package manager (npm/pnpm/yarn/bun), or
+   the one forced via `--use-npm` / `--use-pnpm` / `--use-yarn` / `--use-bun`.
 5. Initializes a Git repository with an initial commit.
 6. Optionally runs `npm run setup` (installs/checks prerequisites, builds contracts,
    starts Docker + the Proof Server, and runs health checks).
@@ -40,7 +41,8 @@ npx create-midnight my-app \
 | `--network <network>` | `preview` or `preprod` |
 | `--git` / `--no-git` | Initialize a git repository |
 | `--install` / `--no-install` | Install dependencies |
-| `--setup` / `--no-setup` | Run `npm run setup` after installation |
+| `--setup` / `--no-setup` | Run `npm run setup` after installation (requires `--install`) |
+| `--use-npm` / `--use-pnpm` / `--use-yarn` / `--use-bun` | Force a package manager instead of auto-detecting |
 | `-y, --yes` | Accept defaults for every prompt |
 | `--verbose` | Print full error output for debugging |
 
@@ -63,6 +65,15 @@ To iterate without hitting the network, point at a local template checkout:
 
 ```bash
 CREATE_MIDNIGHT_LOCAL_TEMPLATE=/path/to/template npm run dev -- my-test-app
+```
+
+## Testing
+
+```bash
+npm run typecheck
+npm run build
+npm test              # fast, offline: runs the CLI against a local fixture template
+CREATE_MIDNIGHT_TEST_NETWORK=1 npm test   # also exercises the real GitHub download path
 ```
 
 ## Architecture

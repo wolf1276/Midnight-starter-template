@@ -51,12 +51,14 @@ export async function commandExists(command: string): Promise<boolean> {
   }
 }
 
-export type PackageManager = 'npm' | 'pnpm' | 'yarn';
+export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
 
-export function detectPackageManager(): PackageManager {
+export function detectPackageManager(override?: PackageManager): PackageManager {
+  if (override) return override;
   const userAgent = process.env.npm_config_user_agent ?? '';
   if (userAgent.startsWith('pnpm')) return 'pnpm';
   if (userAgent.startsWith('yarn')) return 'yarn';
+  if (userAgent.startsWith('bun')) return 'bun';
   return 'npm';
 }
 
