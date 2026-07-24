@@ -1,6 +1,6 @@
 {
   "name": "create-midnight",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Scaffold a production-ready Midnight DApp in seconds.",
   "keywords": [
     "midnight",

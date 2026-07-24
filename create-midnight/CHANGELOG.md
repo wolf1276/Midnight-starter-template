@@ -5,6 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-07-24
+
+### Fixed
+
+- The version-locked template ref now includes the `docker-compose.yml` path
+  fix from the starter template (previously only on `main`, not yet tagged).
+  Fresh `npx create-midnight` scaffolds no longer hit a false "could not
+  query compose state" failure during automatic setup, which forced users to
+  manually re-run `npm run setup` even though nothing was actually broken.
+- Includes the starter template's targeted Docker recovery improvements
+  (port diagnostics, container reuse, safe cleanup of stale/orphaned
+  project containers) from setup.
+
 ## [1.2.0] - 2026-07-24
 
 ### Changed
