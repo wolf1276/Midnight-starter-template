@@ -1,0 +1,7 @@
+name: create-midnight CI
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: node create-midnight/dist/cli.js

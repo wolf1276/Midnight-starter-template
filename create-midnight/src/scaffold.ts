@@ -28,7 +28,16 @@ async function rewriteRootPackageJson(targetDir: string, packageName: string): P
 
 /** Removes files that only make sense inside the upstream template repo. */
 async function cleanTemplateArtifacts(targetDir: string): Promise<void> {
-  const toRemove = ['.git', 'CODEOWNERS', 'renovate.json', 'create-midnight'];
+  const toRemove = [
+    '.git',
+    'CODEOWNERS',
+    'renovate.json',
+    'create-midnight',
+    '.github/workflows/create-midnight.yaml',
+    'CODE_OF_CONDUCT.md',
+    'CONTRIBUTING.md',
+    'SUPPORT.md',
+  ];
   for (const entry of toRemove) {
     const target = path.join(targetDir, entry);
     if (await exists(target)) {

@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-07-24
+
+### Fixed
+
+- Generated projects no longer include `.github/workflows/create-midnight.yaml`,
+  an internal CI workflow for the create-midnight CLI repo itself that
+  referenced paths (`create-midnight/`, `dist/cli.js`) which don't exist in
+  scaffolded projects.
+- Generated projects no longer include `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`,
+  or `SUPPORT.md`, which document how to contribute to the upstream Midnight
+  starter template repo and don't apply to a scaffolded application.
+
 ## [1.1.0] - 2026-07-24
 
 ### Changed

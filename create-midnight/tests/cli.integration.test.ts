@@ -68,6 +68,13 @@ describe('create-midnight CLI (local template fixture)', () => {
     expect(envLocal).toContain('NEXT_PUBLIC_NETWORK_ID=preview');
 
     expect(fs.existsSync(path.join(projectDir, '.git'))).toBe(true);
+
+    expect(fs.existsSync(path.join(projectDir, '.github/workflows/create-midnight.yaml'))).toBe(
+      false
+    );
+    expect(fs.existsSync(path.join(projectDir, 'CODE_OF_CONDUCT.md'))).toBe(false);
+    expect(fs.existsSync(path.join(projectDir, 'CONTRIBUTING.md'))).toBe(false);
+    expect(fs.existsSync(path.join(projectDir, 'SUPPORT.md'))).toBe(false);
   });
 
   it('runs project setup when --setup is passed (requires --install, per CLI semantics)', () => {
