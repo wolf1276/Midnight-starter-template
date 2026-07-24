@@ -13,20 +13,19 @@ already wired together.
 
 ## Quick Start
 
-Pick one:
-
-**npm (recommended)** — scaffolds a fresh project via [`create-midnight`](https://www.npmjs.com/package/create-midnight),
-which also runs setup for you:
-
 ```bash
 npx create-midnight my-app
-# or: npm create midnight@latest my-app
 cd my-app
 
-npm run dev     # starts the frontend
+npm run dev                       # starts the frontend
+npm run deploy -- --network local # deploys to your local Midnight stack — no faucet, no internet required
 ```
 
-**GitHub** — clone this template directly and run setup yourself:
+`local` runs a fully self-contained Midnight node, indexer, and proof server via Docker, and
+deploys against them using a pre-funded genesis wallet — the recommended way to build and test,
+with nothing outside your machine in the loop.
+
+Prefer cloning instead of scaffolding? Clone this template directly and run setup yourself:
 
 ```bash
 git clone <this-repo-url>
@@ -34,13 +33,7 @@ cd example-bboard
 
 ./setup.sh      # installs deps, builds the contract, starts local services
 npm run dev     # starts the frontend
-```
-
-Then, either way:
-
-```bash
-cd contracts
-npm run deploy  # deploys your first contract
+npm run deploy -- --network local
 ```
 
 Open http://localhost:3000 with the [Lace](https://chromewebstore.google.com/detail/lace/gafhhkghbfjjkeiendhlofajokpaflmk)
@@ -64,25 +57,41 @@ or [1AM](https://1am.com/) wallet extension installed.
 ## Deploy Your First Contract
 
 ```bash
-cd contracts
 npm run deploy
 ```
 
-This will:
+Run with no flags, this prompts you to pick a network — **Local** is the default and recommended
+choice. It will:
 
-1. Ask which network to deploy to
-2. Create or load a local wallet automatically
-3. Show funding instructions if your wallet balance is too low
-4. Deploy the contract and save its address
-5. Update the frontend configuration to point at your new deployment
+1. Start the local Docker stack (node, indexer, proof server) if it isn't running
+2. Use a pre-funded genesis wallet — no funding step, no faucet
+3. Deploy the contract and save its address
+4. Update the frontend configuration to point at your new deployment
+
+You can also skip the prompt entirely:
+
+```bash
+npm run deploy -- --network local
+```
+
+### Deploying to Preview or Preprod (optional)
+
+Preview and Preprod are Midnight's public testnets, useful once you want to test against
+real network conditions or share a deployment with others:
+
+```bash
+npm run deploy -- --network preview   # public testnet, faucet available
+npm run deploy -- --network preprod   # closest to mainnet
+```
+
+These use a persisted wallet funded from the network's public faucet, so deployment can be
+blocked by faucet outages or public RPC downtime — local mode never has that dependency.
 
 ## Daily Development
 
 ```bash
 npm run dev
-
-cd contracts
-npm run deploy
+npm run deploy -- --network local
 ```
 
 ## Common Commands

@@ -17,7 +17,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import path from 'node:path';
 
 /** Networks that get their own persistent deployment wallet. */
-export type DeploymentNetwork = 'preview' | 'preprod';
+export type DeploymentNetwork = 'preview' | 'preprod' | 'local';
 
 const currentDir = path.resolve(new URL(import.meta.url).pathname, '..');
 const walletStoreDir = path.resolve(currentDir, '..', '..', 'contracts', '.midnight');

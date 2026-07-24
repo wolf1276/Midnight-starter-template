@@ -2,7 +2,13 @@ import { appendFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { WebSocket } from 'ws';
 import { createLogger } from '../logger-utils.js';
-import { type Config, PreviewRemoteConfig, PreprodRemoteConfig } from '../config.js';
+import {
+  type Config,
+  PreviewRemoteConfig,
+  PreprodRemoteConfig,
+  StandaloneConfig,
+  GENESIS_MINT_WALLET_SEED,
+} from '../config.js';
 import {
   type EnvironmentConfiguration,
   type TestEnvironment,
@@ -37,7 +43,7 @@ globalThis.WebSocket = WebSocket as unknown as typeof globalThis.WebSocket;
 const rawArgs = process.argv.slice(2);
 const verbose = rawArgs.includes('--verbose') || rawArgs.includes('--debug');
 const network = rawArgs.find((a) => !a.startsWith('--')) ?? 'preview';
-const networkLabel = network === 'preprod' ? 'Preprod' : 'Preview';
+const networkLabel = network === 'preprod' ? 'Preprod' : network === 'local' ? 'Local' : 'Preview';
 
 // The SDK ships its own module-level pino-pretty logger that writes straight to the
 // process's stdout file descriptor (bypassing process.stdout.write, so withQuiet() below
@@ -45,7 +51,12 @@ const networkLabel = network === 'preprod' ? 'Preprod' : 'Preview';
 // ("Initializing wallet builder...", "Creating dust wallet...") out of default-mode output.
 if (!verbose) sdkInternalLogger.level = 'silent';
 
-const config: Config = network === 'preprod' ? new PreprodRemoteConfig() : new PreviewRemoteConfig();
+const config: Config =
+  network === 'preprod'
+    ? new PreprodRemoteConfig()
+    : network === 'local'
+      ? new StandaloneConfig()
+      : new PreviewRemoteConfig();
 const logger = await createLogger(config.logDir, !verbose);
 const testEnv: TestEnvironment = config.getEnvironment(logger);
 
@@ -230,7 +241,10 @@ async function main() {
   }
 
   const deploymentNetwork = network as DeploymentNetwork;
-  const existingSeed = loadDeploymentWalletSeed(deploymentNetwork);
+  // Local uses the well-known genesis-funded seed instead of a persisted/random one — the
+  // local devnet has no faucet, so this is the only seed that starts out with funds.
+  const isLocal = config instanceof StandaloneConfig;
+  const existingSeed = isLocal ? GENESIS_MINT_WALLET_SEED : loadDeploymentWalletSeed(deploymentNetwork);
   const isNewWallet = existingSeed === undefined;
 
   const walletStep = ui.step(isNewWallet ? '🔐 Creating Deployment Wallet' : '🔐 Loading Deployment Wallet');

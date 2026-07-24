@@ -16,7 +16,7 @@ import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
 import { type Logger } from 'pino';
-import { type Config, StandaloneConfig } from './config.js';
+import { type Config, StandaloneConfig, GENESIS_MINT_WALLET_SEED } from './config.js';
 import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-private-state-provider';
 import { type ContractAddress } from '@midnight-ntwrk/midnight-js-protocol/compact-runtime';
 import { assertIsContractAddress, toHex } from '@midnight-ntwrk/midnight-js-utils';
@@ -175,8 +175,6 @@ const mainLoop = async (providers: BBoardProviders, rli: Interface, logger: Logg
     subscription.unsubscribe();
   }
 };
-
-const GENESIS_MINT_WALLET_SEED = '0000000000000000000000000000000000000000000000000000000000000001';
 
 const WALLET_LOOP_QUESTION = `
 You can do one of the following:

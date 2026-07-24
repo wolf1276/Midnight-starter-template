@@ -50,8 +50,8 @@ for (let i = 0; i < args.length; i++) {
   }
 }
 
-if (network !== null && !['preview', 'preprod'].includes(network)) {
-  fmt.fail(`Unsupported network '${network}'. Use 'preview' or 'preprod'.`);
+if (network !== null && !['local', 'preview', 'preprod'].includes(network)) {
+  fmt.fail(`Unsupported network '${network}'. Use 'local', 'preview' or 'preprod'.`);
   process.exit(1);
 }
 
@@ -85,6 +85,11 @@ function writeLastNetwork(selected) {
 
 const NETWORK_CHOICES = [
   {
+    value: 'local',
+    name: `Local ${fmt.yellow('⭐ Recommended')}`,
+    description: 'Local Midnight node running via Docker\nNo faucet or internet required after images are pulled\nRecommended for onboarding',
+  },
+  {
     value: 'preview',
     name: 'Preview',
     description: 'Public testing network\nRecommended for development\nFaucet available',
@@ -109,7 +114,7 @@ async function selectNetwork() {
     selected = await select({
       message: `${fmt.cyan('🌐 Select Deployment Network')}`,
       choices,
-      default: lastNetwork ?? undefined,
+      default: lastNetwork ?? 'local',
     });
   } catch {
     console.log('\nDeployment cancelled.');
@@ -270,7 +275,7 @@ async function main() {
   // detection below. Rather than cap the child at a fixed number, size it off whatever
   // memory the machine actually has free right now (leaving headroom for the rest of the
   // system), floored at the old fixed minimums so small/busy machines don't regress.
-  const minHeapMb = network === 'preprod' ? 8192 : 4096;
+  const minHeapMb = network === 'preprod' ? 8192 : network === 'preview' ? 4096 : 2048;
   const freeMb = freemem() / 1024 / 1024;
   const totalMb = totalmem() / 1024 / 1024;
   const heapSizeMb = Math.round(Math.min(Math.max(freeMb * 0.75, minHeapMb), totalMb * 0.85));

@@ -144,7 +144,7 @@ check(
     if (missing.length) throw new Error(`not running: ${missing.join(', ')}`);
     return SERVICES.map((svc) => `${svc}: ${serviceState.get(svc)}`).join(', ');
   },
-  { category: 'Services', fix: 'npm run blockchain:start' },
+  { category: 'Local Environment (Docker)', fix: 'npm run blockchain:start' },
 );
 
 check(
@@ -157,7 +157,7 @@ check(
       throw new Error('unreachable — node container may still be starting');
     }
   },
-  { category: 'Services', fix: 'npm run blockchain:start' },
+  { category: 'Local Environment (Docker)', fix: 'npm run blockchain:start' },
 );
 
 check(
@@ -172,7 +172,7 @@ check(
       throw new Error('unreachable — indexer container may still be starting');
     }
   },
-  { category: 'Services', fix: 'npm run blockchain:start' },
+  { category: 'Local Environment (Docker)', fix: 'npm run blockchain:start' },
 );
 
 check(
@@ -186,7 +186,7 @@ check(
       throw new Error('unreachable');
     }
   },
-  { category: 'Services', fix: 'npm run blockchain:start' },
+  { category: 'Local Environment (Docker)', fix: 'npm run blockchain:start' },
 );
 
 check(
@@ -194,12 +194,29 @@ check(
   () => {
     const conflicts = checkRequiredPorts();
     if (!conflicts.length) return 'all free';
-    // Ports being busy is fine when it's this project's own containers (checked in Services
-    // above) — treat as informational rather than a hard failure to avoid double-reporting.
-    return 'in use — see Services section above for what is bound to them';
+    // Ports being busy is fine when it's this project's own containers (checked above) —
+    // treat as informational rather than a hard failure to avoid double-reporting.
+    return 'in use — see Local Environment section above for what is bound to them';
   },
   { category: 'Environment' },
 );
+
+// --- Deployment history (deployment.json, written by npm run deploy) ---
+const NETWORK_LABELS = { local: 'Local', preview: 'Preview', preprod: 'Preprod' };
+for (const net of ['local', 'preview', 'preprod']) {
+  check(
+    `${NETWORK_LABELS[net]} deployment`,
+    () => {
+      const deploymentPath = resolve(rootDir, 'deployment.json');
+      if (!existsSync(deploymentPath)) throw new Error('no deployment.json — nothing deployed yet');
+      const history = JSON.parse(readFileSync(deploymentPath, 'utf-8'));
+      const latest = Array.isArray(history) ? history.find((d) => d.network === net) : undefined;
+      if (!latest) throw new Error(`no ${net} deployment recorded`);
+      return `${latest.contractAddress} (deployed ${latest.deployedAt})`;
+    },
+    { category: 'Deployments', warnOnly: true, fix: `npm run deploy -- --network ${net}` },
+  );
+}
 
 check(
   'File permissions (setup.sh executable)',

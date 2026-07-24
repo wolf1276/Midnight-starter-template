@@ -35,6 +35,9 @@ export interface Config {
 
 export const currentDir = path.resolve(new URL(import.meta.url).pathname, '..');
 
+/** Well-known seed pre-funded in the local devnet's genesis block — used instead of a faucet. */
+export const GENESIS_MINT_WALLET_SEED = '0000000000000000000000000000000000000000000000000000000000000001';
+
 export class StandaloneConfig implements Config {
   getEnvironment(logger: Logger): TestEnvironment {
     return getTestEnvironment(logger) as TestEnvironment;
