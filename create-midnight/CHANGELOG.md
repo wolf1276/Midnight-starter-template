@@ -5,6 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-07-24
+
+### Changed
+
+- Package manager selection no longer auto-detects or prompts. npm is used by
+  default; pass `--use-bun`, `--use-pnpm`, or `--use-yarn` to opt into a
+  different one. This removes the previous Bun → pnpm → Yarn → npm
+  auto-detection and try-each-until-one-works fallback logic, making project
+  creation faster and more predictable.
+
 ## [1.1.2] - 2026-07-24
 
 ### Fixed
