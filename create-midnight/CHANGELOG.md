@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.5] - 2026-07-24
+
+### Fixed
+
+- Setup/blockchain-start now auto-stops a foreign create-midnight dev stack
+  that's holding required ports (identified via Compose project label and
+  `midnightntwrk/*` image prefix, never a guessed name) instead of failing
+  with a port-conflict error. Named volumes are preserved; unrelated
+  containers/processes still require explicit confirmation as before.
+- Deploy script spawns child processes via `process.execPath` instead of
+  relying on `node` being on `PATH`.
+
 ## [1.2.1] - 2026-07-24
 
 ### Fixed
