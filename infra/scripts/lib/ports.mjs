@@ -15,14 +15,25 @@ function sh(cmd) {
 // project's container that happens to be squatting on the same port.
 export const PROJECT_CONTAINER_PREFIX = 'bboard-';
 
+// Any image published under this org is a Midnight stack component — used to tell "another
+// Midnight project's container happens to be on this port" apart from a truly unrelated one.
+const MIDNIGHT_IMAGE_PREFIX = 'midnightntwrk/';
+
 function findDockerOwner(port) {
   try {
-    const out = sh(`docker ps --format "{{.ID}}\t{{.Names}}\t{{.Ports}}"`);
+    const out = sh(`docker ps --format "{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Ports}}"`);
     for (const line of out.split('\n')) {
       if (!line) continue;
-      const [id, name, ports] = line.split('\t');
+      const [id, name, image, ports] = line.split('\t');
       if (ports && ports.includes(`:${port}->`)) {
-        return { kind: 'docker', id, name, ours: name.startsWith(PROJECT_CONTAINER_PREFIX) };
+        return {
+          kind: 'docker',
+          id,
+          name,
+          image,
+          ours: name.startsWith(PROJECT_CONTAINER_PREFIX),
+          midnight: image.startsWith(MIDNIGHT_IMAGE_PREFIX),
+        };
       }
     }
   } catch {
@@ -40,7 +51,9 @@ function findProcessOwner(port) {
     if (dataLine) {
       const parts = dataLine.trim().split(/\s+/);
       const [name, pid] = parts;
-      return { kind: 'process', name, pid };
+      // Best-effort full executable path/command line — purely informational, never blocks.
+      const exe = sh(`ps -o comm= -p ${pid}`) || undefined;
+      return { kind: 'process', name, pid, exe };
     }
   } catch {
     // lsof not installed or nothing listening — fall through
@@ -68,34 +81,48 @@ export function checkRequiredPorts() {
   return conflicts;
 }
 
-/** Formats the "❌ Port Already In Use" panel for a single conflict. */
+/** Formats the "❌ Port Already In Use" panel for a single conflict, distinguishing exactly
+ *  what's holding the port: this project's own container, another Midnight project's container,
+ *  an unrelated Docker container, or a plain OS process. */
 export function formatPortConflict({ port, service, owner }) {
   const lines = [];
   lines.push('');
   lines.push(color.red(color.bold('❌ Port Already In Use')));
   lines.push('');
-  lines.push(`Port ${port} is already occupied.`);
+  lines.push(`Port ${port}${service ? ` (${service})` : ''} is already occupied.`);
   lines.push('');
-  lines.push(`${service ? `${service[0].toUpperCase()}${service.slice(1)} requires this port.\n\n` : ''}Used by:`);
-  lines.push('');
-  if (owner?.kind === 'docker') {
-    lines.push('Docker Container:');
-    lines.push(owner.name);
-  } else if (owner?.kind === 'process') {
-    lines.push(`PID ${owner.pid}`);
-    lines.push(owner.name);
-  } else {
-    lines.push('(could not identify the process — try `lsof -i` or `docker ps` yourself)');
-  }
-  lines.push('');
-  lines.push('To fix:');
-  lines.push('');
-  if (owner?.kind === 'docker') {
+  if (owner?.kind === 'docker' && owner.ours) {
+    lines.push(`Owned by this project's own container: ${owner.name} (image ${owner.image}).`);
+    lines.push('');
+    lines.push('This is expected if the stack is already running — `npm run setup` reuses it automatically.');
+    lines.push('If it looks stuck instead:');
+    lines.push('');
+    lines.push(`  docker restart ${owner.name}`);
+  } else if (owner?.kind === 'docker' && owner.midnight) {
+    lines.push(`Owned by a container from a different Midnight project: ${owner.name} (image ${owner.image}).`);
+    lines.push('');
+    lines.push('Stop that project\'s stack, or free the port:');
+    lines.push('');
     lines.push(`  docker stop ${owner.name}`);
-  } else if (owner?.kind === 'process' && owner.pid) {
+  } else if (owner?.kind === 'docker') {
+    lines.push(`Owned by an unrelated Docker container: ${owner.name} (image ${owner.image}).`);
+    lines.push('');
+    lines.push('To free it:');
+    lines.push('');
+    lines.push(`  docker stop ${owner.name}`);
+  } else if (owner?.kind === 'process') {
+    lines.push(`Owned by process: ${owner.name}${owner.exe ? ` (${owner.exe})` : ''}, PID ${owner.pid}.`);
+    lines.push('');
+    lines.push('To free it:');
+    lines.push('');
     lines.push(`  kill ${owner.pid}`);
   } else {
+    lines.push('Could not identify the owner automatically.');
+    lines.push('');
+    lines.push('Investigate with:');
+    lines.push('');
     lines.push(`  lsof -i :${port}`);
+    lines.push(`  docker ps`);
   }
   lines.push('');
   return lines;
