@@ -56,6 +56,7 @@ function findDockerOwner(port) {
           id,
           name,
           image,
+          project,
           ours: project === COMPOSE_PROJECT_NAME,
           midnight: image.startsWith(MIDNIGHT_IMAGE_PREFIX),
         };

@@ -125,14 +125,37 @@ export async function waitForPortFree(port, { retries = 5, delayMs = 500 } = {})
 }
 
 /**
+ * Only one local Midnight dev stack is meant to run on a machine at a time (fixed host ports
+ * are intentional — see infra/docker/docker-compose.yml — so scaffolded projects can point
+ * wallets/tools at fixed addresses). Stops another create-midnight project's whole Compose
+ * project (all its containers + its network), identified by its containers' image prefix
+ * rather than by guessing a name, so a fresh `docker compose up -d` here never hits a port
+ * conflict just because a previous project's stack was left running. Named volumes are left
+ * alone — `down` with no `-v` never touches them.
+ */
+export async function stopForeignMidnightProject(projectName, fmt) {
+  fmt.info('Found an existing create-midnight development environment.');
+  fmt.info('Stopping it so this project can use the local Midnight ports...');
+  try {
+    sh(`docker compose -p ${projectName} down --remove-orphans`);
+    return true;
+  } catch (e) {
+    fmt.warn(`Could not fully stop project "${projectName}" (${e.message ?? e}).`);
+    return false;
+  }
+}
+
+/**
  * Attempts to automatically resolve a set of port conflicts (as returned by
  * `checkRequiredPorts()`) before the caller gives up and fails:
  *
  *  - one of this project's own containers (name prefixed `bboard-`) is stopped and removed,
  *    so the caller's subsequent `docker compose up -d` recreates it cleanly and execution
  *    continues without any manual `docker stop`/`docker compose down`;
- *  - a foreign Docker container is only ever stopped after the user explicitly confirms —
- *    we tell them which container owns the port first;
+ *  - another create-midnight project's stack is stopped automatically (see
+ *    stopForeignMidnightProject) — only one local Midnight stack is meant to run at a time;
+ *  - a foreign, non-Midnight Docker container is only ever stopped after the user explicitly
+ *    confirms — we tell them which container owns the port first;
  *  - a non-Docker process is never touched automatically; it's always left in `remaining`
  *    for the caller to report via `printPortConflicts`.
  *
@@ -142,12 +165,34 @@ export async function waitForPortFree(port, { retries = 5, delayMs = 500 } = {})
 export async function recoverPortConflicts(conflicts, { fmt = ui } = {}) {
   const remaining = [];
 
+  // Stop each distinct foreign create-midnight project once, up front, rather than once per
+  // conflicting port (node/indexer/proof-server conflicts all point at the same project).
+  const foreignMidnightProjects = [
+    ...new Set(
+      conflicts
+        .filter((c) => c.owner?.kind === 'docker' && c.owner.midnight && !c.owner.ours && c.owner.project)
+        .map((c) => c.owner.project),
+    ),
+  ];
+  for (const projectName of foreignMidnightProjects) {
+    await stopForeignMidnightProject(projectName, fmt);
+  }
+
   for (const conflict of conflicts) {
     const { port, owner } = conflict;
 
     if (!owner || owner.kind === 'process') {
       // Never touch a non-Docker process automatically.
       remaining.push(conflict);
+      continue;
+    }
+
+    if (owner.kind === 'docker' && owner.midnight && !owner.ours && owner.project) {
+      if (await waitForPortFree(port)) {
+        fmt.info(`Port ${port} is free again.`);
+      } else {
+        remaining.push(conflict);
+      }
       continue;
     }
 
