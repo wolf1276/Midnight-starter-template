@@ -16,7 +16,7 @@ const verbose = process.argv.includes('--verbose') || process.argv.includes('--d
 
 const results = [];
 
-function check(name, fn, { category = 'Environment', fix, skip } = {}) {
+function check(name, fn, { category = 'Environment', fix, skip, warnOnly } = {}) {
   if (skip) {
     results.push({ name, category, ok: true, detail: 'skipped (not applicable here)' });
     return;
@@ -27,7 +27,9 @@ function check(name, fn, { category = 'Environment', fix, skip } = {}) {
   } catch (e) {
     const message =
       e && typeof e === 'object' && 'howToFix' in e ? e.whatHappened.replace(/\n+/g, ' ').trim() : (e.message ?? String(e));
-    results.push({ name, category, ok: false, detail: message, fix: fix ?? (e && e.howToFix) });
+    // warnOnly: shown as a failed row in the report, but doesn't block the overall exit code —
+    // matches run-preflight.mjs, which treats Docker memory as worth flagging, not worth blocking setup over.
+    results.push({ name, category, ok: false, warnOnly, detail: message, fix: fix ?? (e && e.howToFix) });
   }
 }
 
@@ -41,7 +43,7 @@ check('npm', preflightChecks.npm, { category: 'Toolchain' });
 check('Docker CLI', preflightChecks.dockerCli, { category: 'Toolchain' });
 check('Docker daemon running', preflightChecks.dockerDaemon, { category: 'Toolchain', fix: 'Start Docker Desktop, then re-run npm run doctor' });
 check('Docker Compose plugin', preflightChecks.dockerCompose, { category: 'Toolchain' });
-check('Docker memory allocation', preflightChecks.dockerMemory, { category: 'Toolchain' });
+check('Docker memory allocation', preflightChecks.dockerMemory, { category: 'Toolchain', warnOnly: true });
 check('Compact CLI', preflightChecks.compactCli, { category: 'Toolchain' });
 check('Compact compiler toolchain', preflightChecks.compactCompiler, { category: 'Toolchain', fix: 'compact update' });
 check('Internet connectivity', preflightChecks.internet, { category: 'Toolchain' });
@@ -277,7 +279,10 @@ if (failed.length) {
     if (r.fix) ui.info(`  ${ui.color.dim('Suggested fix:')} ${ui.color.cyan(r.fix)}`);
   }
   ui.info('');
+}
+
+if (failed.some((r) => !r.warnOnly)) {
   process.exit(1);
 } else {
-  ui.section('✅ Ready for development');
+  ui.section(failed.length ? '✅ Ready for development (with warnings above)' : '✅ Ready for development');
 }
