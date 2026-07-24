@@ -13,6 +13,15 @@ function sh(cmd) {
 // This project's containers are all named with this prefix (see infra/docker/docker-compose.yml's
 // `container_name:` entries) — used to tell "our stack being restarted" apart from some other
 // project's container that happens to be squatting on the same port.
+//
+// Name matching over Compose project labels (`com.docker.compose.project`) is deliberate here:
+// the compose file has no top-level `name:`, so Compose derives that label from the directory
+// basename ("docker" — infra/docker/), which is generic and would collide with any other repo's
+// compose file living in a directory of the same name. The explicit `container_name: bboard-*`
+// values are unique to this repo and cannot collide, making them the more reliable identity
+// signal — not merely equivalent to the label. If the compose file later adds a top-level
+// `name:` (making the project label repo-specific), prefer matching on
+// `com.docker.compose.project` at that point.
 export const PROJECT_CONTAINER_PREFIX = 'bboard-';
 
 // Any image published under this org is a Midnight stack component — used to tell "another
