@@ -121,17 +121,32 @@ describe('create-midnight CLI (local template fixture)', () => {
 describe('create-midnight CLI (real GitHub download)', () => {
   const shouldRun = process.env.CREATE_MIDNIGHT_TEST_NETWORK === '1';
 
-  it.skipIf(!shouldRun)('downloads, extracts, and configures the real starter template from GitHub', () => {
-    const result = spawnSync(
+  function runReal(args: string[]) {
+    return spawnSync(
       'node',
-      [path.join(packageRoot, 'node_modules', '.bin', 'tsx'), path.join(packageRoot, 'src', 'cli.ts'), 'network-app', '--yes', '--no-install', '--no-setup', '--no-git'],
+      [path.join(packageRoot, 'node_modules', '.bin', 'tsx'), path.join(packageRoot, 'src', 'cli.ts'), ...args],
       { cwd: workDir, env: process.env, encoding: 'utf8' }
     );
+  }
+
+  it.skipIf(!shouldRun)('downloads, extracts, and configures the real starter template from GitHub via --ref main', () => {
+    // The upstream repo has no version tags yet (see the version-locking test below),
+    // so the real-network happy path is exercised via an explicit --ref override.
+    const result = runReal(['network-app', '--yes', '--no-install', '--no-setup', '--no-git', '--ref', 'main']);
 
     expect(result.status).toBe(0);
     const projectDir = path.join(workDir, 'network-app');
     expect(fs.existsSync(path.join(projectDir, 'package.json'))).toBe(true);
     expect(fs.existsSync(path.join(projectDir, 'web', '.env.local'))).toBe(true);
     expect(fs.existsSync(path.join(projectDir, '.git'))).toBe(false);
+  });
+
+  it.skipIf(!shouldRun)('shows the friendly "compatible template version not found" error against the real repo (no matching tag exists yet)', () => {
+    const result = runReal(['no-tag-app', '--yes', '--no-install', '--no-setup', '--no-git']);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('Compatible template version not found');
+    expect(result.stderr).toContain('Repository: wolf1276/Midnight-starter-template');
+    expect(result.stderr).not.toContain('at CLIError');
   });
 });
