@@ -287,13 +287,14 @@ node infra/scripts/setup/run-step.mjs "npm run build:all" "$@" -- npm run build:
 ok "Contract compiled, TypeScript bindings and CLI/API built"
 
 step "7/${TOTAL_STEPS} Installing git hooks"
-if [ -d .git ]; then
-  mkdir -p .git/hooks
-  cat > .git/hooks/pre-commit <<'HOOK'
+git_dir="$(git rev-parse --git-path hooks 2>/dev/null)"
+if [ -n "$git_dir" ]; then
+  mkdir -p "$git_dir"
+  cat > "$git_dir/pre-commit" <<'HOOK'
 #!/usr/bin/env bash
 npm run --silent lint --workspaces --if-present
 HOOK
-  chmod +x .git/hooks/pre-commit
+  chmod +x "$git_dir/pre-commit"
   ok "Installed pre-commit hook (lint)"
 else
   warn "Not a git repository — skipping git hooks"

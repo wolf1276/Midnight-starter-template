@@ -148,6 +148,13 @@ jobs:
       - name: Run doctor (environment + service health checks)
         run: npm run doctor
 
+      - name: Reset blockchain (soft, then --hard), verify idempotent
+        run: |
+          npm run blockchain:reset
+          npm run blockchain:reset
+          npm run blockchain:reset -- --hard
+          npm run blockchain:reset -- --hard
+
       - name: Stop local blockchain
         if: always()
         run: npm run blockchain:stop

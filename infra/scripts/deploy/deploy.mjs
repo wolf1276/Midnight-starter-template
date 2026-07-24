@@ -189,8 +189,12 @@ async function main() {
 
   deployStart = Date.now();
 
-  await ensureDockerRunning(fmt);
-  await ensureLocalMidnightServices(rootDir, fmt, verbose);
+  // preview/preprod deploy against RemoteTestEnvironment (public testnets, cli/src/config.ts)
+  // and never touch the local node/indexer/proof-server stack — only 'local' needs it up.
+  if (network === 'local') {
+    await ensureDockerRunning(fmt);
+    await ensureLocalMidnightServices(rootDir, fmt, verbose);
+  }
 
   fmt.section(`\u{1F680} Midnight Contract Deployment`);
   fmt.info(`Network: ${network}`);

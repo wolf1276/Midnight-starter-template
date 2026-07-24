@@ -165,9 +165,9 @@ check(
   () => {
     if (!ownsPort(8088)) throw new Error('port 8088 is not owned by this project\'s own container');
     try {
-      const code = sh("curl -s -o /dev/null -w '%{http_code}' http://localhost:8088");
-      if (!/^\d{3}$/.test(code)) throw new Error('no response');
-      return `HTTP ${code}`;
+      // /ready (not /) 503s until the indexer has caught up with the node's chain height.
+      sh('curl -sf http://localhost:8088/ready');
+      return 'ready';
     } catch {
       throw new Error('unreachable — indexer container may still be starting');
     }
@@ -180,7 +180,9 @@ check(
   () => {
     if (!ownsPort(6300)) throw new Error('port 6300 is not owned by this project\'s own container');
     try {
-      sh('curl -sf http://localhost:6300 || nc -z localhost 6300');
+      // No TCP-only fallback: the port accepts connections before the ZK proving/verifying
+      // keys finish downloading, so only a real /health response counts as reachable.
+      sh('curl -sf http://localhost:6300/health');
       return 'reachable';
     } catch {
       throw new Error('unreachable');
@@ -230,7 +232,15 @@ check(
 check(
   'Git hooks installed',
   () => {
-    if (!existsSync(resolve(rootDir, '.git', 'hooks', 'pre-commit'))) throw new Error('missing');
+    // Worktree checkouts have a .git *file* (not a dir) pointing elsewhere — ask git for the
+    // real hooks path instead of assuming rootDir/.git/hooks.
+    let hooksDir;
+    try {
+      hooksDir = execSync('git rev-parse --git-path hooks', { cwd: rootDir, encoding: 'utf-8' }).trim();
+    } catch {
+      throw new Error('not a git repository');
+    }
+    if (!existsSync(resolve(rootDir, hooksDir, 'pre-commit'))) throw new Error('missing');
     return 'installed';
   },
   // Hooks only matter for someone committing from this checkout; an ephemeral CI runner

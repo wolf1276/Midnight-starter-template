@@ -113,8 +113,10 @@ function checkRpc() {
 function checkIndexer() {
   if (!ownsPort(8088)) return false;
   try {
-    const code = sh("curl -s -o /dev/null -w '%{http_code}' http://localhost:8088").trim();
-    return /^\d{3}$/.test(code);
+    // /ready (not /) 503s until the indexer has caught up with the node's chain height —
+    // that's the actual signal we need, not just "some HTTP server is listening".
+    sh('curl -sf http://localhost:8088/ready');
+    return true;
   } catch {
     return false;
   }
@@ -123,7 +125,9 @@ function checkIndexer() {
 function checkProofServer() {
   if (!ownsPort(6300)) return false;
   try {
-    sh('curl -sf http://localhost:6300 > /dev/null 2>&1 || nc -z localhost 6300');
+    // No TCP-only fallback: the port accepts connections before the ~20MB ZK proving/
+    // verifying keys finish downloading, so only a real /health response counts.
+    sh('curl -sf http://localhost:6300/health');
     return true;
   } catch {
     return false;
@@ -207,7 +211,7 @@ export async function ensureLocalMidnightServices(rootDir, fmt, verbose) {
         title: 'Proof Server Failed To Start',
         whatHappened:
           'One or more of node/indexer/proof-server did not become healthy in time, and an automatic restart did not fix it.\n\nPossible causes: Docker has insufficient memory, a required port is already in use, or a container failed to initialize.',
-        howToFix: `Inspect logs and reset:\n\n  docker compose -f ${composeFile} logs\n  npm run blockchain:reset\n  npm run blockchain:start`,
+        howToFix: `Inspect logs and reset:\n\n  docker compose -f ${composeFile} logs\n  npm run blockchain:reset\n  npm run blockchain:start\n\nIf that doesn't help, persisted chain/indexer data may be corrupted:\n\n  npm run blockchain:reset -- --hard\n  npm run blockchain:start`,
       }),
       verbose,
     );

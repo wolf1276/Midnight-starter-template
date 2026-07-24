@@ -27,4 +27,5 @@ managed automatically by the deploy pipeline and needs no manual Docker commands
 | `npm run docker:stop` | Stop the Docker stack |
 | `npm run docker:reset` | Stop the stack and drop its volumes (fresh chain state) |
 | `npm run blockchain:start` | Start only node + indexer + proof server (no web container) |
-| `npm run blockchain:reset` | Remove the blockchain service containers |
+| `npm run blockchain:reset` | Remove the blockchain service containers (chain/indexer data preserved) |
+| `npm run blockchain:reset -- --hard` | Also drop the node/indexer volumes (fully fresh chain state) |
