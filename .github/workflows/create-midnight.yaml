@@ -43,7 +43,7 @@ jobs:
       # (actions/setup-node@<sha> #v5) before merging — left as a version tag here
       # since the exact SHA wasn't verified in this pass.
       - name: Setup Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
 
