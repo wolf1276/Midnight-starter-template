@@ -2,37 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { detectPackageManager, formatRunCommand, toPackageName, validateProjectName } from '../src/utils.js';
 import type { PackageManager } from '../src/utils.js';
 
-/** Simulates only the given executables being present on PATH. */
-function checkerFor(available: string[]) {
-  return async (command: string) => available.includes(command);
-}
-
 describe('detectPackageManager', () => {
-  it('prefers bun when everything is available', async () => {
-    expect(await detectPackageManager(undefined, checkerFor(['bun', 'pnpm', 'yarn']))).toBe('bun');
+  it('defaults to npm when no override is given', () => {
+    expect(detectPackageManager()).toBe('npm');
   });
 
-  it('falls back to pnpm when bun is missing', async () => {
-    expect(await detectPackageManager(undefined, checkerFor(['pnpm', 'yarn']))).toBe('pnpm');
-  });
-
-  it('falls back to yarn when bun and pnpm are missing', async () => {
-    expect(await detectPackageManager(undefined, checkerFor(['yarn']))).toBe('yarn');
-  });
-
-  it('falls back to npm when nothing else is found', async () => {
-    expect(await detectPackageManager(undefined, checkerFor([]))).toBe('npm');
-  });
-
-  it('returns the explicit override regardless of what is installed', async () => {
-    expect(await detectPackageManager('npm', checkerFor(['bun', 'pnpm', 'yarn']))).toBe('npm');
-  });
-
-  it('honors each override flag', async () => {
-    const checker = checkerFor(['bun', 'pnpm', 'yarn']);
-    expect(await detectPackageManager('bun', checker)).toBe('bun');
-    expect(await detectPackageManager('pnpm', checker)).toBe('pnpm');
-    expect(await detectPackageManager('yarn', checker)).toBe('yarn');
+  it('honors each override flag', () => {
+    expect(detectPackageManager('npm')).toBe('npm');
+    expect(detectPackageManager('bun')).toBe('bun');
+    expect(detectPackageManager('pnpm')).toBe('pnpm');
+    expect(detectPackageManager('yarn')).toBe('yarn');
   });
 });
 

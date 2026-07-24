@@ -102,10 +102,7 @@ describe('create-midnight CLI (local template fixture)', () => {
   it('runs project setup when --setup is passed (requires --install, per CLI semantics)', () => {
     const result = runCli(['setup-app', '--yes', '--install', '--setup', '--no-git']);
     expect(result.status).toBe(0);
-    // Install + setup are now validated together per package manager before
-    // committing to one; whichever one is actually available on this machine/CI
-    // runner wins, so assert on the outcome rather than a specific PM name.
-    expect(result.stderr).toMatch(/Using (Bun|pnpm|Yarn|npm)/);
+    expect(result.stdout).toContain('Using npm');
     expect(result.stdout).toMatch(/✓ Dependencies installed/);
     expect(result.stdout).toMatch(/✓ Setup completed/);
   });
