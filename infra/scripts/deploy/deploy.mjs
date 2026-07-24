@@ -271,7 +271,7 @@ async function main() {
   const heapSizeMb = network === 'preprod' ? 8192 : 4096;
 
   let stderrOutput = '';
-  const child = spawn('node', cliArgs, {
+  const child = spawn(process.execPath, cliArgs, {
     cwd: resolve(rootDir, 'cli'),
     stdio: ['inherit', 'inherit', 'pipe'],
     env: {
