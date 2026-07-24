@@ -11,7 +11,11 @@ const SCRIPT_RUN_PREFIX: Record<PackageManager, string[]> = {
 };
 
 export async function runProjectScript(targetDir: string, pm: PackageManager, script: string): Promise<void> {
-  const result = await run(pm, [...SCRIPT_RUN_PREFIX[pm], script], { cwd: targetDir, captureOutput: true });
+  // setup.sh has its own internal per-step timeout (SETUP_STEP_TIMEOUT_MS); this is a much
+  // longer outer backstop so the CLI itself never hangs forever if that project script has no
+  // such guard (e.g. a template that doesn't use setup.sh at all).
+  const timeoutMs = Number(process.env.CREATE_MIDNIGHT_SETUP_TIMEOUT_MS) || 30 * 60 * 1000;
+  const result = await run(pm, [...SCRIPT_RUN_PREFIX[pm], script], { cwd: targetDir, captureOutput: true, timeoutMs });
   if (result.code !== 0) {
     throw new CLIError(
       'SETUP_FAILED',

@@ -14,14 +14,19 @@ export interface ExecResult {
 export function run(
   command: string,
   args: string[],
-  options: { cwd?: string; captureOutput?: boolean } = {}
+  options: { cwd?: string; captureOutput?: boolean; timeoutMs?: number } = {}
 ): Promise<ExecResult> {
   return new Promise((resolve, reject) => {
     verbose(`$ ${command} ${args.join(' ')}`);
+    // detached so the child gets its own process group: killing just the immediate child
+    // (e.g. `npm`) doesn't reach grandchildren it spawned (a postinstall script, and whatever
+    // that script spawns) — npm then waits on those before it can exit, so the timeout below
+    // would never actually unblock anything without signalling the whole group.
     const child = spawn(command, args, {
       cwd: options.cwd,
       stdio: options.captureOutput ? ['ignore', 'pipe', 'pipe'] : 'ignore',
-      shell: process.platform === 'win32'
+      shell: process.platform === 'win32',
+      detached: process.platform !== 'win32'
     });
 
     let stdout = '';
@@ -31,11 +36,43 @@ export function run(
       child.stderr?.on('data', (chunk) => (stderr += chunk.toString()));
     }
 
+    // Without this, a stuck child (e.g. a dependency's postinstall script hanging on a
+    // network fetch or binary probe during `npm install`/`npm run setup`) blocks the CLI
+    // forever with no error and no way to tell "still working" from "hung".
+    let timedOut = false;
+    const killGroup = (signal: NodeJS.Signals) => {
+      if (process.platform === 'win32' || !child.pid) {
+        child.kill(signal);
+        return;
+      }
+      try {
+        process.kill(-child.pid, signal);
+      } catch {
+        child.kill(signal);
+      }
+    };
+    const timer = options.timeoutMs
+      ? setTimeout(() => {
+          timedOut = true;
+          killGroup('SIGTERM');
+          // The hang is typically a blocking syscall (e.g. spawnSync) that won't yield to
+          // SIGTERM until it returns, so escalate if the group is still alive shortly after.
+          setTimeout(() => killGroup('SIGKILL'), 5000).unref();
+        }, options.timeoutMs)
+      : undefined;
+
     child.on('error', (error) => {
+      clearTimeout(timer);
       reject(error);
     });
 
     child.on('close', (code) => {
+      clearTimeout(timer);
+      if (timedOut) {
+        stderr += `\n[timed out after ${Math.round((options.timeoutMs ?? 0) / 1000)}s — likely a hung postinstall/build script]`;
+        resolve({ code: 1, stdout, stderr });
+        return;
+      }
       resolve({ code: code ?? 1, stdout, stderr });
     });
   });

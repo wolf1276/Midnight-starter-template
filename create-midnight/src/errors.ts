@@ -9,6 +9,7 @@ export type ErrorCode =
   | 'NETWORK_FAILURE'
   | 'TEMPLATE_VERSION_NOT_FOUND'
   | 'INSTALL_FAILED'
+  | 'INSTALL_TIMEOUT'
   | 'SETUP_FAILED'
   | 'PERMISSION_DENIED'
   | 'DISK_FULL'
@@ -44,6 +45,10 @@ const RECOVERY: Record<ErrorCode, string[]> = {
   INSTALL_FAILED: [
     `Try running the install manually inside the project: ${pc.cyan('npm install')}`,
     'Delete node_modules and any lockfile conflicts, then retry.'
+  ],
+  INSTALL_TIMEOUT: [
+    `Run ${pc.cyan('npm install --ignore-scripts')} inside the project to confirm a postinstall script is the cause.`,
+    'Retry with a longer limit: CREATE_MIDNIGHT_INSTALL_TIMEOUT_MS=1800000 npx create-midnight ...'
   ],
   SETUP_FAILED: [
     `Run setup manually inside the project: ${pc.cyan('npm run setup')}`,

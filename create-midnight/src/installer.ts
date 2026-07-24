@@ -17,8 +17,21 @@ export async function installDependencies(targetDir: string, pm: PackageManager)
     throw new CLIError('NPM_MISSING', `${pm} is not installed or not on your PATH.`);
   }
 
-  const result = await run(pm, INSTALL_ARGS[pm], { cwd: targetDir, captureOutput: true });
+  // A hung postinstall script (e.g. a native module probing/downloading a prebuilt binary)
+  // would otherwise block indefinitely with no output — indistinguishable from "still working".
+  const timeoutMs = Number(process.env.CREATE_MIDNIGHT_INSTALL_TIMEOUT_MS) || 10 * 60 * 1000;
+  const result = await run(pm, INSTALL_ARGS[pm], { cwd: targetDir, captureOutput: true, timeoutMs });
   if (result.code !== 0) {
+    if (/timed out after/i.test(result.stderr)) {
+      throw new CLIError(
+        'INSTALL_TIMEOUT',
+        `Dependency installation timed out after ${Math.round(timeoutMs / 1000)}s — a postinstall ` +
+          `script is likely stuck (e.g. downloading a native binary). Try again with ` +
+          `CREATE_MIDNIGHT_INSTALL_TIMEOUT_MS set higher, or run "${pm} install --ignore-scripts" ` +
+          `in the project directory to confirm.`,
+        result.stderr
+      );
+    }
     if (/ENOSPC|no space left/i.test(result.stderr)) {
       throw new CLIError('DISK_FULL', 'Ran out of disk space while installing dependencies.', result.stderr);
     }
