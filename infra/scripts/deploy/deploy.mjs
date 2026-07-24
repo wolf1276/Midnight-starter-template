@@ -3,7 +3,7 @@ import { spawn, execSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { tmpdir } from 'node:os';
+import { tmpdir, freemem, totalmem } from 'node:os';
 import { select } from '@inquirer/prompts';
 import { versions } from '../lib/versions.mjs';
 import { ensureDockerRunning, ensureLocalMidnightServices } from '../lib/infra.mjs';
@@ -267,8 +267,13 @@ async function main() {
   // Preprod's indexer has a much longer transaction history than preview's, and wallet
   // sync currently has to walk all of it before it can report a synced state — so preprod
   // runs need a bigger heap than preview to get through sync without hitting the OOM
-  // detection below.
-  const heapSizeMb = network === 'preprod' ? 8192 : 4096;
+  // detection below. Rather than cap the child at a fixed number, size it off whatever
+  // memory the machine actually has free right now (leaving headroom for the rest of the
+  // system), floored at the old fixed minimums so small/busy machines don't regress.
+  const minHeapMb = network === 'preprod' ? 8192 : 4096;
+  const freeMb = freemem() / 1024 / 1024;
+  const totalMb = totalmem() / 1024 / 1024;
+  const heapSizeMb = Math.round(Math.min(Math.max(freeMb * 0.75, minHeapMb), totalMb * 0.85));
 
   let stderrOutput = '';
   const child = spawn(process.execPath, cliArgs, {
@@ -298,7 +303,7 @@ async function main() {
 
   function printOutOfMemoryPanel() {
     fmt.section('\u{1F4A5} Wallet Sync Ran Out of Memory');
-    fmt.fail(`Node ran out of memory (${heapSizeMb}MB heap) while syncing the ${network} wallet.`);
+    fmt.fail(`Node ran out of memory (${heapSizeMb}MB heap, sized from ~${Math.round(freeMb)}MB free of ${Math.round(totalMb)}MB total) while syncing the ${network} wallet.`);
     fmt.info('');
     fmt.info(
       network === 'preprod'
@@ -306,10 +311,10 @@ async function main() {
         : 'Wallet sync needed more memory than was available.',
     );
     fmt.info('');
-    fmt.info('You can:');
+    fmt.info('The heap above was already sized from most of this machine\'s free memory, so:');
     fmt.info('  • Re-run the command — sync progress is not preserved across crashes, but transient memory pressure may not recur');
-    fmt.info('  • Close other memory-heavy applications and retry');
-    fmt.info(`  • Raise the heap limit further: NODE_OPTIONS=--max-old-space-size=${heapSizeMb * 2} npm run deploy -- --network ${network}`);
+    fmt.info('  • Close other memory-heavy applications and retry (frees up more for the next sync attempt)');
+    fmt.info(`  • Force a specific heap size: NODE_OPTIONS=--max-old-space-size=<MB> npm run deploy -- --network ${network}`);
     fmt.info('  • Re-run with --verbose to see full sync diagnostics leading up to the crash');
     fmt.info('');
   }
