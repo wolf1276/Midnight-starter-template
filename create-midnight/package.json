@@ -1,6 +1,6 @@
 {
   "name": "create-midnight",
-  "version": "1.2.1",
+  "version": "1.2.3",
   "description": "Scaffold a production-ready Midnight DApp in seconds.",
   "keywords": [
     "midnight",
@@ -32,7 +32,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "npm run build"
+    "prepack": "npm run build"
   },
   "dependencies": {
     "@clack/prompts": "^0.9.1",
