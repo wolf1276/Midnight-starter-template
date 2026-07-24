@@ -16,12 +16,78 @@
 import path from 'node:path';
 import {
   EnvironmentConfiguration,
-  getTestEnvironment,
+  IndexerClient,
+  LocalTestConfiguration,
+  NodeClient,
+  ProofServerClient,
   RemoteTestEnvironment,
   TestEnvironment,
 } from '@midnight-ntwrk/testkit-js';
 import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import { Logger } from 'pino';
+import { MidnightWalletProvider } from './midnight-wallet-provider.js';
+
+/** Ports of the local Docker stack started by infra/scripts/lib/infra.mjs (docker-compose.yml). */
+const LOCAL_STACK_PORTS = { node: 9944, indexer: 8088, proofServer: 6300 };
+
+/**
+ * Points at the local node/indexer/proof-server already started by
+ * infra/scripts/lib/infra.mjs's `ensureLocalMidnightServices`, rather than spinning up testkit-js's
+ * own throwaway containers (which expect a `compose.yml` this template doesn't ship). Shutdown is a
+ * no-op — the stack is shared with `npm run dev` and stays up across CLI invocations.
+ */
+class LocalStandaloneTestEnvironment extends TestEnvironment {
+  private environmentConfiguration!: EnvironmentConfiguration;
+
+  getEnvironmentConfiguration(): EnvironmentConfiguration {
+    return new LocalTestConfiguration(LOCAL_STACK_PORTS);
+  }
+
+  start = async (): Promise<EnvironmentConfiguration> => {
+    this.logger.info('Using local Midnight stack (node/indexer/proof-server) started by npm run deploy...');
+    this.environmentConfiguration = this.getEnvironmentConfiguration();
+    // infra.mjs's own pre-flight checks only confirm each container is reachable, not that it has
+    // finished its own startup work — the indexer's /ready keeps 503ing until it catches up with the
+    // node's chain height, and on a cold volume the proof server can still be mid-download of its ZK
+    // proving/verifying keys (~20MB from S3) after its port is already accepting TCP connections. Both
+    // race a single immediate health check, so poll all three the same way (90s/2s, matching infra.mjs).
+    await this.waitForHealthy('node', () => new NodeClient(this.environmentConfiguration.node, this.logger).health());
+    await this.waitForHealthy('indexer', () =>
+      new IndexerClient(this.environmentConfiguration.indexer, this.logger).health(),
+    );
+    await this.waitForHealthy('proof server', () =>
+      new ProofServerClient(this.environmentConfiguration.proofServer, this.logger).health(),
+    );
+    return this.environmentConfiguration;
+  };
+
+  private waitForHealthy = async (name: string, healthCheck: () => Promise<unknown>): Promise<void> => {
+    const timeoutMs = 90_000;
+    const pollIntervalMs = 2_000;
+    const deadline = Date.now() + timeoutMs;
+    while (true) {
+      try {
+        await healthCheck();
+        return;
+      } catch (e) {
+        if (Date.now() >= deadline) throw e;
+        this.logger.info(`Waiting for ${name} to become healthy...`);
+        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+      }
+    }
+  };
+
+  shutdown = async (): Promise<void> => {};
+
+  startMidnightWalletProviders = async (amount = 1, seeds?: string[]): Promise<MidnightWalletProvider[]> => {
+    const config = this.getEnvironmentConfiguration();
+    const providers = await Promise.all(
+      Array.from({ length: amount }, (_, i) => MidnightWalletProvider.build(this.logger, config, seeds?.[i])),
+    );
+    await Promise.all(providers.map((provider) => provider.start()));
+    return providers;
+  };
+}
 
 export interface Config {
   readonly privateStateStoreName: string;
@@ -40,7 +106,8 @@ export const GENESIS_MINT_WALLET_SEED = '000000000000000000000000000000000000000
 
 export class StandaloneConfig implements Config {
   getEnvironment(logger: Logger): TestEnvironment {
-    return getTestEnvironment(logger) as TestEnvironment;
+    setNetworkId('undeployed');
+    return new LocalStandaloneTestEnvironment(logger);
   }
   privateStateStoreName = 'bboard-private-state';
   logDir = path.resolve(currentDir, '..', 'logs', 'standalone', `${new Date().toISOString()}.log`);
