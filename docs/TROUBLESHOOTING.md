@@ -37,7 +37,7 @@ internet connection. The script shows download progress while it runs.
 
 **Fix:** Install `curl`, then retry `./setup.sh`. Or install manually:
 ```
-curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/midnightntwrk/compact/main/install.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh
 ```
 
 ---
@@ -76,14 +76,37 @@ Then re-run whatever command failed.
 
 **What happened:** One of the required ports is already occupied.
 
-**Why:** Another service or a stale container is using the port.
+**Why:** Another service or a stale container is using the port. Only one local Midnight stack
+is meant to run per machine — the node/indexer/proof-server ports are fixed (not randomized) so
+tools and wallets can point at stable addresses, which also means a second scaffolded project
+can't run its stack at the same time as this one.
 
 **Fix:**
 ```
-npm run docker:reset
+npm run blockchain:reset
 npm run blockchain:start
 ```
-This stops all containers and removes volumes (resets chain state — safe for dev).
+If that doesn't clear it (e.g. the port is held by a different Midnight project or a leftover
+container), see [`blockchain:reset` vs `blockchain:reset -- --hard`](#blockchainreset-vs-blockchainreset----hard) below.
+
+---
+
+### `blockchain:reset` vs `blockchain:reset -- --hard`
+
+**What they do:**
+- `npm run blockchain:reset` — removes the node/indexer/proof-server containers, but preserves
+  the `node-data`/`indexer-data` volumes. Fast; the chain picks up where it left off on the next
+  `npm run blockchain:start`.
+- `npm run blockchain:reset -- --hard` — also drops those volumes, so the next start is a fully
+  fresh chain (new genesis state, empty indexer).
+
+**When to use which:**
+- Containers stuck, unhealthy, or a stale port conflict → plain `blockchain:reset`.
+- Chain/indexer data itself looks corrupted, or you want a clean slate (e.g. after switching
+  Compact/contract versions) → `blockchain:reset -- --hard`.
+
+Both are idempotent — safe to run repeatedly, including back-to-back or against an
+already-stopped stack.
 
 ---
 

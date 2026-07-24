@@ -7,7 +7,12 @@
 npm run docker:start   # equivalent to: docker compose -f infra/docker/docker-compose.yml --profile web up -d --build
 ```
 
-Fixed host ports: node `9944`, indexer `8088`, proof server `6300`, web `3000`.
+Fixed host ports: node `9944`, indexer `8088`, proof server `6300`, web `3000`. These are
+intentionally fixed rather than randomized, so wallets/tools can point at stable addresses — the
+tradeoff is that only one scaffolded Midnight project's local stack can run per machine at a
+time. `npm run setup` and `npm run deploy -- --network local` detect and stop another
+create-midnight project's stack automatically to free the ports; an unrelated process squatting
+on one of them must be freed manually (see [TROUBLESHOOTING.md](../docs/TROUBLESHOOTING.md)).
 
 The root `Dockerfile` also has a `prod` target producing a minimal standalone Next.js image:
 

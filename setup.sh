@@ -250,7 +250,7 @@ fi
 if ! command -v compact >/dev/null 2>&1; then
   warn "Compact CLI not found. Installing via the official installer..."
   if command -v curl >/dev/null 2>&1; then
-    curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/midnightntwrk/compact/main/install.sh | sh
+    curl --proto '=https' --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh
     export PATH="$HOME/.local/bin:$PATH"
   fi
   if ! command -v compact >/dev/null 2>&1; then
@@ -259,8 +259,20 @@ if ! command -v compact >/dev/null 2>&1; then
 fi
 ok "Compact CLI $(compact --version 2>/dev/null | tail -n1)"
 
-if ! compact list 2>/dev/null | grep -q '\*'; then
+if ! compact list 2>/dev/null | grep -qE -- '->|→|\*'; then
   warn "No Compact compiler toolchain installed yet — installing latest via 'compact update'..."
+  # `compact update` extracts a .zip release artifact and needs `unzip` on PATH; minimal Linux
+  # installs (fresh cloud/server images, bare Docker base images) commonly don't ship it.
+  if ! command -v unzip >/dev/null 2>&1 && [ -n "$PKG_MGR" ]; then
+    warn "unzip not found (required by 'compact update') — installing via ${PKG_MGR}..."
+    SUDO=""; [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1 && SUDO="sudo"
+    case "$PKG_MGR" in
+      apt) $SUDO apt-get update -qq && $SUDO apt-get install -y -qq unzip ;;
+      dnf) $SUDO dnf install -y -q unzip ;;
+      yum) $SUDO yum install -y -q unzip ;;
+      pacman) $SUDO pacman -Sy --noconfirm unzip ;;
+    esac
+  fi
   compact update
 fi
 ok "Compact compiler toolchain ready"

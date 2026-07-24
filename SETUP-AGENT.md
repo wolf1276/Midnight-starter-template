@@ -123,7 +123,7 @@ back to manual steps if `setup.sh` fails and you need to diagnose why.
    - Check `docker compose version` (v2 plugin required).
    - Check `command -v compact`. If missing, install with:
      ```bash
-     curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/midnightntwrk/compact/main/install.sh | sh
+     curl --proto '=https' --tlsv1.2 -LsSf https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh
      export PATH="$HOME/.local/bin:$PATH"
      ```
    - Check `compact list` for a `*`-marked toolchain entry; if none, run `compact update`.

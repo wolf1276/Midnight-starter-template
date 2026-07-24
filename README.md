@@ -46,6 +46,29 @@ or [1AM](https://1am.com/) wallet extension installed.
 - Node.js — `setup.sh` checks and installs this for you
 - Windows — run `setup.sh` inside [WSL2](https://learn.microsoft.com/windows/wsl/install), not native PowerShell/Git Bash
 
+### Supported operating systems
+
+| OS | Status |
+| --- | --- |
+| Linux (x86_64, aarch64) | Supported — tested on Ubuntu |
+| macOS (Apple Silicon, Intel) | Supported |
+| Windows via WSL2 | Supported — run `setup.sh` inside the WSL2 distro |
+| Windows native (PowerShell/Git Bash) | Not supported — `setup.sh` exits with a WSL2 install pointer |
+
+### Known limitations
+
+- **One local stack per machine.** The node/indexer/proof-server ports (`9944`, `8088`, `6300`)
+  are fixed, not randomized, so only one scaffolded Midnight project's local stack can run at a
+  time. `npm run setup` / `npm run deploy -- --network local` detect and stop another
+  create-midnight project's stack automatically; an unrelated process on those ports must be
+  freed manually.
+- **Docker memory.** Docker needs at least 4GB allocated (8GB recommended) for node + indexer +
+  proof-server together; `npm run doctor` warns (not fails) below that.
+- **Minimal Linux installs** (fresh cloud/server images, bare containers) may be missing `unzip`
+  (needed by `compact update`) or `lsof` (used for port-conflict diagnostics, degrades gracefully
+  if absent) — `setup.sh` installs `unzip` automatically when a supported package manager is
+  detected.
+
 ## What `setup.sh` Does
 
 - Installs dependencies across the workspace
