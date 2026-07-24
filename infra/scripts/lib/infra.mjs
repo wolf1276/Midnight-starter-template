@@ -48,7 +48,7 @@ export async function ensureDockerRunning(fmt) {
       new DockerError({
         title: 'Docker Daemon Not Running',
         whatHappened: 'Docker is not running, and this is a non-interactive environment — refusing to wait indefinitely.',
-        howToFix: 'Start Docker before running this command, e.g.:\n\n  sudo systemctl start docker',
+        howToFix: 'Start Docker Desktop (or `sudo systemctl start docker` on Linux), then retry.',
       }),
       false,
     );
@@ -154,8 +154,16 @@ export async function ensureLocalMidnightServices(rootDir, fmt, verbose) {
   if (running.length < required.length) {
     const missing = required.filter((s) => !before.has(s));
     const stopped = required.filter((s) => before.has(s) && !/running/i.test(before.get(s)));
-
-    const conflicts = checkRequiredPorts();
+    const needsRestart = new Set([...missing, ...stopped]);
+    // Ports of services already up: not conflicts, they're this run's own healthy containers.
+    // Recovering them here would stop+remove a container `docker compose up -d` was never
+    // going to touch, forcing an unnecessary cold restart (and, for node, a slow re-sync)
+    // of a service that didn't need it.
+    const SERVICE_PORT = { node: 9944, indexer: 8088, 'proof-server': 6300 };
+    const conflicts = checkRequiredPorts().filter((c) => {
+      const service = Object.keys(SERVICE_PORT).find((s) => SERVICE_PORT[s] === c.port);
+      return !service || needsRestart.has(service);
+    });
     if (conflicts.length) {
       const { resolved, remaining } = await recoverPortConflicts(conflicts, { fmt });
       if (!resolved) {
