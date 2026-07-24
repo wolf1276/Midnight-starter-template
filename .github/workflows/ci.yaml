@@ -155,6 +155,13 @@ jobs:
           npm run blockchain:reset -- --hard
           npm run blockchain:reset -- --hard
 
+      # Reset-then-restart is the recovery path an onboarding user hits when the local stack
+      # gets into a bad state; doctor must come back healthy afterward with no manual cleanup.
+      - name: Restart after reset and verify recovery
+        run: |
+          npm run blockchain:start
+          npm run doctor
+
       - name: Stop local blockchain
         if: always()
         run: npm run blockchain:stop
