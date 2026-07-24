@@ -29,7 +29,7 @@ bulletin board dApp (contract, API, CLI, and Next.js frontend) meant to be scaff
 
 ### Fixed
 - CI now sets `NEXT_PUBLIC_NETWORK_ID` for the web build
-- `docker/.env` is generated before any compose command, with a unique per-machine
+- `infra/docker/.env` is generated before any compose command, with a unique per-machine
   indexer secret instead of a fixed value shared across clones
 - `npm run doctor` no longer fails the git-hooks check on CI runners
 

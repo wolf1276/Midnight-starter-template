@@ -21,7 +21,7 @@ COPY contracts/package.json contracts/package.json
 COPY api/package.json api/package.json
 COPY cli/package.json cli/package.json
 COPY web/package.json web/package.json
-COPY patches ./patches
+COPY infra/patches ./infra/patches
 RUN npm ci
 
 # --- dev: full source, run the Next.js dev server with hot reload -----------

@@ -13,13 +13,32 @@ already wired together.
 
 ## Quick Start
 
+Pick one:
+
+**npm (recommended)** — scaffolds a fresh project via [`create-midnight`](https://www.npmjs.com/package/create-midnight),
+which also runs setup for you:
+
+```bash
+npx create-midnight my-app
+# or: npm create midnight@latest my-app
+cd my-app
+
+npm run dev     # starts the frontend
+```
+
+**GitHub** — clone this template directly and run setup yourself:
+
 ```bash
 git clone <this-repo-url>
 cd example-bboard
 
 ./setup.sh      # installs deps, builds the contract, starts local services
 npm run dev     # starts the frontend
+```
 
+Then, either way:
+
+```bash
 cd contracts
 npm run deploy  # deploys your first contract
 ```
@@ -81,7 +100,7 @@ Every push and pull request runs the `CI` workflow (`.github/workflows/ci.yaml`)
 
 - **Build matrix** — lint, typecheck, build, and test the contract, API, CLI, and web workspaces
   on Ubuntu, macOS, and Windows in parallel (`fail-fast: false`, so one platform failing doesn't
-  hide results from the others). Onboarding scripts (`setup.sh`, `scripts/**/*.mjs`) are also
+  hide results from the others). Onboarding scripts (`setup.sh`, `infra/scripts/**/*.mjs`) are also
   syntax-checked on every platform (the `setup.sh` check is skipped on Windows, where it isn't
   meant to run natively — see [Prerequisites](#prerequisites)).
 - **Integration job** — runs only on Ubuntu, since it needs Docker. It builds the workspace,

@@ -71,12 +71,12 @@ export async function ensureDockerRunning(fmt) {
 }
 
 export function ensureIndexerSecret(rootDir, fmt = { info: () => {} }) {
-  const envFile = resolve(rootDir, 'docker', '.env');
+  const envFile = resolve(rootDir, 'infra', 'docker', '.env');
   if (existsSync(envFile) && /^INDEXER_SECRET=.+$/m.test(readFileSync(envFile, 'utf-8'))) return;
   mkdirSync(dirname(envFile), { recursive: true });
   const secret = randomBytes(32).toString('hex');
   writeFileSync(envFile, `INDEXER_SECRET=${secret}\n`);
-  fmt.info('Generated docker/.env with a new INDEXER_SECRET.');
+  fmt.info('Generated infra/docker/.env with a new INDEXER_SECRET.');
 }
 
 function composeState(composeFile) {
@@ -128,7 +128,7 @@ export async function ensureLocalMidnightServices(rootDir, fmt, verbose) {
   fmt.section('\u{1F510} Proof Server');
   fmt.info('Checking Proof Server...');
 
-  const composeFile = resolve(rootDir, 'docker', 'docker-compose.yml');
+  const composeFile = resolve(rootDir, 'infra', 'docker', 'docker-compose.yml');
   ensureIndexerSecret(rootDir, fmt);
 
   const required = ['node', 'indexer', 'proof-server'];

@@ -254,11 +254,11 @@ fi
 ok "Compact compiler toolchain ready"
 
 step "3/${TOTAL_STEPS} Pre-flight checks (disk space, permissions, connectivity, Docker memory)"
-node scripts/setup/run-preflight.mjs "$@" || exit 1
+node infra/scripts/setup/run-preflight.mjs "$@" || exit 1
 
 step "4/${TOTAL_STEPS} Installing dependencies (npm workspaces: contracts, api, cli, web)"
 info "⏳ Running npm install (this can take a few minutes on first run)..."
-node scripts/setup/run-step.mjs "npm install" "$@" -- npm install
+node infra/scripts/setup/run-step.mjs "npm install" "$@" -- npm install
 ok "Dependencies installed"
 
 step "5/${TOTAL_STEPS} Creating environment files"
@@ -271,7 +271,7 @@ fi
 
 step "6/${TOTAL_STEPS} Compiling contract and building workspaces (artifacts + type bindings)"
 info "⏳ Running npm run build:all..."
-node scripts/setup/run-step.mjs "npm run build:all" "$@" -- npm run build:all
+node infra/scripts/setup/run-step.mjs "npm run build:all" "$@" -- npm run build:all
 ok "Contract compiled, TypeScript bindings and CLI/API built"
 
 step "7/${TOTAL_STEPS} Installing git hooks"
@@ -288,20 +288,20 @@ else
 fi
 
 step "8/${TOTAL_STEPS} Pulling Docker images and starting the local dev stack (node, indexer, proof-server)"
-if [ ! -f "docker/.env" ] || ! grep -q '^INDEXER_SECRET=.\+' "docker/.env" 2>/dev/null; then
+if [ ! -f "infra/docker/.env" ] || ! grep -q '^INDEXER_SECRET=.\+' "infra/docker/.env" 2>/dev/null; then
   # 32 random bytes hex-encoded — dev-only secret to satisfy the indexer's config schema,
   # unique per machine instead of the fixed value every clone of this repo used to share.
-  printf 'INDEXER_SECRET=%s\n' "$(openssl rand -hex 32 2>/dev/null || node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("hex"))')" > docker/.env
-  ok "Generated docker/.env with a unique dev secret for the indexer"
+  printf 'INDEXER_SECRET=%s\n' "$(openssl rand -hex 32 2>/dev/null || node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("hex"))')" > infra/docker/.env
+  ok "Generated infra/docker/.env with a unique dev secret for the indexer"
 else
-  ok "docker/.env already exists (left untouched)"
+  ok "infra/docker/.env already exists (left untouched)"
 fi
 
 info "⏳ Pulling images (this can take a while on first run)..."
-node scripts/setup/run-step.mjs "docker compose pull" "$@" -- docker compose -f docker/docker-compose.yml pull node indexer proof-server
+node infra/scripts/setup/run-step.mjs "docker compose pull" "$@" -- docker compose -f infra/docker/docker-compose.yml pull node indexer proof-server
 ok "Docker images pulled"
 
-node scripts/setup/run-step.mjs "docker compose up" "$@" -- docker compose -f docker/docker-compose.yml up -d node indexer proof-server
+node infra/scripts/setup/run-step.mjs "docker compose up" "$@" -- docker compose -f infra/docker/docker-compose.yml up -d node indexer proof-server
 ok "Containers started (node, indexer, proof-server)"
 
 step "9/${TOTAL_STEPS} Waiting for services and verifying RPC connectivity"
@@ -320,7 +320,7 @@ wait_for() {
     tries=$((tries + 1))
     if [ "$tries" -ge "$max" ]; then
       err "${name} did not become reachable at ${url} in time."
-      err "Check logs with: docker compose -f docker/docker-compose.yml logs ${name}"
+      err "Check logs with: docker compose -f infra/docker/docker-compose.yml logs ${name}"
       return 1
     fi
     sleep 2
@@ -329,15 +329,15 @@ wait_for() {
 }
 
 wait_for "node" "http://localhost:9944/health" 1 || die "Node did not become healthy — see log command above."
-wait_for "indexer" "http://localhost:8088" 0 || warn "Indexer not yet reachable — it may still be catching up; check 'docker compose -f docker/docker-compose.yml ps'"
+wait_for "indexer" "http://localhost:8088" 0 || warn "Indexer not yet reachable — it may still be catching up; check 'docker compose -f infra/docker/docker-compose.yml ps'"
 
 if curl -sf "http://localhost:6300" >/dev/null 2>&1 || nc -z localhost 6300 >/dev/null 2>&1; then
   ok "proof-server reachable on :6300"
 else
-  warn "proof-server did not respond on :6300 yet — check 'docker compose -f docker/docker-compose.yml logs proof-server'"
+  warn "proof-server did not respond on :6300 yet — check 'docker compose -f infra/docker/docker-compose.yml logs proof-server'"
 fi
 
 step "10/${TOTAL_STEPS} Running full health checks"
 npm run doctor || die "Some checks failed — see above. Fix them, then re-run: npm run doctor"
 
-node scripts/setup/print-success.mjs
+node infra/scripts/setup/print-success.mjs

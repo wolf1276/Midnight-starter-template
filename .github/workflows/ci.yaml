@@ -89,7 +89,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          find scripts -name '*.mjs' -print0 | xargs -0 -n1 node --check
+          find infra/scripts -name '*.mjs' -print0 | xargs -0 -n1 node --check
 
       - name: Upload build output on failure
         if: failure()
@@ -158,6 +158,6 @@ jobs:
         with:
           name: integration-logs
           path: |
-            docker/*.log
+            infra/docker/*.log
           if-no-files-found: ignore
           retention-days: 5

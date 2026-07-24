@@ -11,8 +11,8 @@ import { checkRequiredPorts, printPortConflicts } from './ports.mjs';
 import { tryStartDocker, recoverPortConflicts } from './recovery.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-export const rootDir = resolve(__dirname, '..', '..');
-export const composeFile = resolve(rootDir, 'docker', 'docker-compose.yml');
+export const rootDir = resolve(__dirname, '..', '..', '..');
+export const composeFile = resolve(rootDir, 'infra', 'docker', 'docker-compose.yml');
 
 export const verbose = process.argv.includes('--verbose') || process.argv.includes('--debug');
 
@@ -55,7 +55,7 @@ export async function runCompose(label, args, { checkPorts = false, requireDaemo
     }
   }
 
-  // docker-compose.yml interpolates INDEXER_SECRET from docker/.env for every command
+  // docker-compose.yml interpolates INDEXER_SECRET from infra/docker/.env for every command
   // (up, stop, down, ps, ...), not just `up` — so this must run unconditionally here,
   // not only on the `checkPorts` (start) path. setup.sh generates this file too; this
   // covers anyone who runs blockchain:*/docker:* directly without running setup.sh.

@@ -25,7 +25,7 @@ interface VersionsConfig {
   ports: Record<string, string>;
 }
 const versions = JSON.parse(
-  readFileSync(resolve(__dirname, '..', '..', 'config', 'versions.json'), 'utf-8'),
+  readFileSync(resolve(__dirname, '..', '..', 'infra', 'config', 'versions.json'), 'utf-8'),
 ) as VersionsConfig;
 
 const isTTY = Boolean(process.stdout.isTTY);
@@ -253,7 +253,7 @@ export function classifyError(e: unknown, retryCommand?: string): CLIError {
         title: 'Docker Image Pull Failed',
         whatHappened: `Docker could not pull a required image.\n\n${message}`,
         howToFix:
-          'Check your internet connection and that you can reach Docker Hub, then retry:\n\n  npm run blockchain:start\n\nIf this persists, check config/versions.json for the expected image tags.',
+          'Check your internet connection and that you can reach Docker Hub, then retry:\n\n  npm run blockchain:start\n\nIf this persists, check infra/config/versions.json for the expected image tags.',
       },
       { cause },
     );
@@ -300,7 +300,7 @@ export function classifyError(e: unknown, retryCommand?: string): CLIError {
         title: 'Container Failed To Start',
         whatHappened: `A required container failed to start or become healthy.\n\n${message}`,
         howToFix:
-          'Inspect logs and retry:\n\n  docker compose -f docker/docker-compose.yml logs\n  npm run blockchain:reset\n  npm run blockchain:start',
+          'Inspect logs and retry:\n\n  docker compose -f infra/docker/docker-compose.yml logs\n  npm run blockchain:reset\n  npm run blockchain:start',
       },
       { cause },
     );
@@ -401,7 +401,7 @@ export function classifyError(e: unknown, retryCommand?: string): CLIError {
           title: 'Proof Server Startup Timeout',
           whatHappened: 'The Proof Server did not become healthy in time.',
           howToFix:
-            'Check logs and retry:\n\n  docker compose -f docker/docker-compose.yml logs proof-server\n  npm run blockchain:reset\n  npm run blockchain:start',
+            'Check logs and retry:\n\n  docker compose -f infra/docker/docker-compose.yml logs proof-server\n  npm run blockchain:reset\n  npm run blockchain:start',
         },
         { cause },
       );
@@ -421,7 +421,7 @@ export function classifyError(e: unknown, retryCommand?: string): CLIError {
         title: 'Indexer Unavailable',
         whatHappened: `The Indexer could not be reached or reported bad health.\n\n${message}`,
         howToFix:
-          'Check logs and retry:\n\n  docker compose -f docker/docker-compose.yml logs indexer\n  npm run blockchain:reset\n  npm run blockchain:start',
+          'Check logs and retry:\n\n  docker compose -f infra/docker/docker-compose.yml logs indexer\n  npm run blockchain:reset\n  npm run blockchain:start',
       },
       { cause },
     );
@@ -432,7 +432,7 @@ export function classifyError(e: unknown, retryCommand?: string): CLIError {
         title: 'Midnight Node Unavailable',
         whatHappened: `The Midnight Node RPC could not be reached or failed to sync in time.\n\n${message}`,
         howToFix:
-          'Check logs and retry:\n\n  docker compose -f docker/docker-compose.yml logs node\n  npm run blockchain:reset\n  npm run blockchain:start',
+          'Check logs and retry:\n\n  docker compose -f infra/docker/docker-compose.yml logs node\n  npm run blockchain:reset\n  npm run blockchain:start',
       },
       { cause },
     );

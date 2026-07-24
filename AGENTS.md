@@ -10,10 +10,11 @@ This is an npm-workspaces monorepo for the Midnight Network bulletin board dApp.
 | `api/` | Shared types and the `BBoardAPI` class used by both `cli/` and `web/` |
 | `cli/` | Command-line deployment/interaction tool |
 | `web/` | Next.js frontend (App Router) |
-| `scripts/deploy/` | End-to-end deploy orchestration script (`deploy.mjs`) |
-| `scripts/docker/` | Ephemeral proof server compose files used by testkit-js during deploy |
-| `scripts/doctor.mjs` | Environment health check (`npm run doctor`) |
-| `docker/` | Full local dev-stack docker-compose (node/indexer/proof-server/web) |
+| `infra/` | Build/ops tooling: `config/` (pinned versions), `docker/` (dev-stack compose), `patches/` (dependency patches), `scripts/` (setup, doctor, deploy, docker/blockchain lifecycle) |
+| `infra/scripts/deploy/` | End-to-end deploy orchestration script (`deploy.mjs`) |
+| `infra/scripts/docker/` | `docker:start/stop/reset` wrapper scripts |
+| `infra/scripts/doctor.mjs` | Environment health check (`npm run doctor`) |
+| `infra/docker/` | Full local dev-stack docker-compose (node/indexer/proof-server/web) |
 | `docs/` | Additional documentation (changelog, etc.) |
 | `setup.sh` | One-command zero-config bootstrap (`npm run setup`) |
 | `deployment.json` | Generated after `npm run contracts:deploy` — gitignored, local history of deploys |

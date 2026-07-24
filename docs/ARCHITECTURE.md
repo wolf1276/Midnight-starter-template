@@ -10,13 +10,13 @@ web/  (Next.js frontend) ──uses──▶ api/  (shared BBoardAPI, provider w
         ▼                                  │
 Midnight network (preview/preprod/devnet) ──┘── contracts/ (Compact source, compiled artifacts)
 
-cli/  — headless deploy/interact tool, shares api/ and contracts/, used by scripts/deploy/deploy.mjs
+cli/  — headless deploy/interact tool, shares api/ and contracts/, used by infra/scripts/deploy/deploy.mjs
 ```
 
 - The wallet extension supplies indexer/proof-server/node endpoints at runtime
   (`connectedAPI.getConfiguration()`), so the same web build works unmodified against whichever
   network the user's wallet is configured for.
-- The CLI's deploy path (`scripts/deploy/deploy.mjs` → `cli/src/launcher/deploy.ts`) uses
+- The CLI's deploy path (`infra/scripts/deploy/deploy.mjs` → `cli/src/launcher/deploy.ts`) uses
   `testkit-js`'s `RemoteTestEnvironment` to provision an ephemeral wallet + proof server, fund it
   from the network faucet, and deploy — no persistent CLI-side wallet state.
 
@@ -27,12 +27,15 @@ cli/  — headless deploy/interact tool, shares api/ and contracts/, used by scr
 ├── api/                # Shared types and the BBoardAPI class (used by cli/ and web/)
 ├── cli/                # Command-line deployment/interaction tool
 ├── web/                # Next.js frontend (App Router)
-├── docker/             # docker-compose.yml (full local dev stack) + Dockerfile targets
+├── infra/              # Build/ops tooling (not app code)
+│   ├── config/         # versions.json — pinned image/tool versions, ports
+│   ├── docker/         # docker-compose.yml (full local dev stack) + env template
+│   ├── patches/        # patch-package patches for third-party deps
+│   └── scripts/
+│       ├── deploy/     # deploy.mjs — end-to-end deploy orchestration
+│       ├── docker/     # docker:start/stop/reset wrapper scripts
+│       └── doctor.mjs  # environment health check
 ├── docs/               # Additional documentation (changelog, etc.)
-├── scripts/
-│   ├── deploy/         # deploy.mjs — end-to-end deploy orchestration
-│   ├── docker/         # proof-server compose files used by testkit-js during deploy
-│   └── doctor.mjs      # environment health check
 ├── setup.sh            # one-command zero-config bootstrap
 ├── .env.example         # documents every env var across workspaces
 └── deployment.json      # generated after your first deploy (gitignored)

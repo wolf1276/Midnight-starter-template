@@ -22,7 +22,7 @@ import {
 import { checkRequiredPorts, printPortConflicts } from './ports.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-export const rootDir = resolve(__dirname, '..', '..');
+export const rootDir = resolve(__dirname, '..', '..', '..');
 
 function sh(cmd) {
   return execSync(cmd, { encoding: 'utf-8', shell: true, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -231,7 +231,7 @@ export const checks = {
   requiredFiles: () => {
     const missing = [];
     if (!existsSync(resolve(rootDir, 'package.json'))) missing.push('package.json');
-    if (!existsSync(resolve(rootDir, 'docker', 'docker-compose.yml'))) missing.push('docker/docker-compose.yml');
+    if (!existsSync(resolve(rootDir, 'infra', 'docker', 'docker-compose.yml'))) missing.push('infra/docker/docker-compose.yml');
     if (missing.length) {
       throw new FilesystemError({
         title: 'Missing Required Files',

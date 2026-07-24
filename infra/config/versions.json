@@ -1,5 +1,5 @@
 {
-  "$comment": "Single source of truth for pinned third-party image/tool versions, the required Node.js major version, and the ports this stack binds, used across docker-compose files, setup.sh, and the deploy scripts. Update here first, then keep docker/docker-compose.yml and cli/proof-server.yml in sync — `npm run doctor` checks they match.",
+  "$comment": "Single source of truth for pinned third-party image/tool versions, the required Node.js major version, and the ports this stack binds, used across docker-compose files, setup.sh, and the deploy scripts. Update here first, then keep infra/docker/docker-compose.yml and cli/proof-server.yml in sync — `npm run doctor` checks they match.",
   "midnightNodeImage": "midnightntwrk/midnight-node:0.22.3",
   "indexerImage": "midnightntwrk/indexer-standalone:4.0.1",
   "proofServerImage": "midnightntwrk/proof-server:8.0.3",

@@ -330,7 +330,7 @@ async function main() {
   const explorerUrl = config.explorerUrl ? config.explorerUrl.replace('{contractAddress}', address) : '';
 
   logger.info(`Deployed contract at address: ${address}`);
-  // Machine-readable result consumed by scripts/deploy/deploy.mjs to write deployment.json
+  // Machine-readable result consumed by infra/scripts/deploy/deploy.mjs to write deployment.json
   // and update web/.env.local. Written to a file (path passed via env var) rather than
   // printed to stdout, so parsing doesn't depend on scraping a magic line out of otherwise
   // free-form CLI output.
@@ -352,7 +352,7 @@ async function main() {
   await quiet(() => walletProvider.stop());
   await quiet(() => testEnv.shutdown());
 
-  // The single, polished success screen is printed by scripts/deploy/deploy.mjs once this
+  // The single, polished success screen is printed by infra/scripts/deploy/deploy.mjs once this
   // process exits — it also owns writing deployment.json and updating web/.env.local, so
   // all of that belongs in one final summary instead of being split across two processes.
   process.exit(0);

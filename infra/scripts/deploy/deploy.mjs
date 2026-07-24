@@ -13,7 +13,7 @@ import { checks as preflightChecks } from '../lib/preflight.mjs';
 import { printDeploymentComplete } from '../lib/success.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const rootDir = resolve(__dirname, '..', '..');
+const rootDir = resolve(__dirname, '..', '..', '..');
 
 // --- Terminal formatting helpers, backed by scripts/lib/ui.mjs (same visual language as
 // setup.sh/doctor.mjs/cli/src/ui.ts \u2014 no local reimplementation). ---
@@ -249,7 +249,7 @@ async function main() {
   }
 
   // Note: the proof server itself is started by RemoteTestEnvironment (testkit-js)
-  // inside deploy.ts via scripts/docker/proof-server.yml — no need to start it here too.
+  // inside deploy.ts via cli/proof-server.yml — no need to start it here too.
 
   fmt.section(`\u{1F4E6} Deploying to ${network}`);
 

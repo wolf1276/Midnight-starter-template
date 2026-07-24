@@ -10,7 +10,7 @@ function sh(cmd) {
   return execSync(cmd, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
 }
 
-// This project's containers are all named with this prefix (see docker/docker-compose.yml's
+// This project's containers are all named with this prefix (see infra/docker/docker-compose.yml's
 // `container_name:` entries) — used to tell "our stack being restarted" apart from some other
 // project's container that happens to be squatting on the same port.
 export const PROJECT_CONTAINER_PREFIX = 'bboard-';
@@ -57,7 +57,7 @@ export function checkPort(port) {
   return { free: true };
 }
 
-/** Checks all ports this stack needs (config/versions.json's `ports` map). Returns an array of conflicts (empty if all free). */
+/** Checks all ports this stack needs (infra/config/versions.json's `ports` map). Returns an array of conflicts (empty if all free). */
 export function checkRequiredPorts() {
   const conflicts = [];
   for (const portStr of Object.keys(versions.ports)) {

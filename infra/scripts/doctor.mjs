@@ -11,7 +11,7 @@ import { checks as preflightChecks } from './lib/preflight.mjs';
 import { checkRequiredPorts } from './lib/ports.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const rootDir = resolve(__dirname, '..');
+const rootDir = resolve(__dirname, '..', '..');
 const verbose = process.argv.includes('--verbose') || process.argv.includes('--debug');
 
 const results = [];
@@ -211,7 +211,7 @@ check(
 check(
   'Indexer dev secret configured',
   () => {
-    const envFile = resolve(rootDir, 'docker', '.env');
+    const envFile = resolve(rootDir, 'infra', 'docker', '.env');
     if (!existsSync(envFile) || !/^INDEXER_SECRET=.+$/m.test(readFileSync(envFile, 'utf-8'))) throw new Error('missing');
     return 'present';
   },
@@ -220,15 +220,15 @@ check(
 
 let versionMismatches = [];
 check(
-  'Pinned image versions match config/versions.json',
+  'Pinned image versions match infra/config/versions.json',
   () => {
-    const compose = readFileSync(resolve(rootDir, 'docker', 'docker-compose.yml'), 'utf-8');
+    const compose = readFileSync(resolve(rootDir, 'infra', 'docker', 'docker-compose.yml'), 'utf-8');
     const cliProofServer = readFileSync(resolve(rootDir, 'cli', 'proof-server.yml'), 'utf-8');
     const mismatches = [];
     for (const [file, text, expected] of [
-      ['docker/docker-compose.yml', compose, versions.midnightNodeImage],
-      ['docker/docker-compose.yml', compose, versions.indexerImage],
-      ['docker/docker-compose.yml', compose, versions.proofServerImage],
+      ['infra/docker/docker-compose.yml', compose, versions.midnightNodeImage],
+      ['infra/docker/docker-compose.yml', compose, versions.indexerImage],
+      ['infra/docker/docker-compose.yml', compose, versions.proofServerImage],
       ['cli/proof-server.yml', cliProofServer, versions.proofServerImage],
     ]) {
       if (!text.includes(expected)) mismatches.push(`${file} does not reference ${expected}`);

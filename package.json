@@ -9,9 +9,9 @@
     "node": ">=24.11.1"
   },
   "scripts": {
-    "postinstall": "patch-package",
+    "postinstall": "patch-package --patch-dir infra/patches",
     "setup": "./setup.sh",
-    "doctor": "node scripts/doctor.mjs",
+    "doctor": "node infra/scripts/doctor.mjs",
     "verify": "npm run doctor",
     "dev": "npm run dev -w @midnight-ntwrk/bboard-web",
     "test": "npm run test --workspaces --if-present",
@@ -23,14 +23,14 @@
     "contracts:build": "npm run build:contract",
     "contracts:test": "npm run test -w @midnight-ntwrk/bboard-contract",
     "contracts:deploy": "npm run deploy --",
-    "deploy": "node scripts/deploy/deploy.mjs",
+    "deploy": "node infra/scripts/deploy/deploy.mjs",
     "wallet:reset": "npm run wallet:reset -w @midnight-ntwrk/bboard-cli --",
-    "docker:start": "node scripts/docker/start.mjs",
-    "docker:stop": "node scripts/docker/stop.mjs",
-    "docker:reset": "node scripts/docker/reset.mjs",
-    "blockchain:start": "node scripts/blockchain/start.mjs",
-    "blockchain:stop": "node scripts/blockchain/stop.mjs",
-    "blockchain:reset": "node scripts/blockchain/reset.mjs"
+    "docker:start": "node infra/scripts/docker/start.mjs",
+    "docker:stop": "node infra/scripts/docker/stop.mjs",
+    "docker:reset": "node infra/scripts/docker/reset.mjs",
+    "blockchain:start": "node infra/scripts/blockchain/start.mjs",
+    "blockchain:stop": "node infra/scripts/blockchain/stop.mjs",
+    "blockchain:reset": "node infra/scripts/blockchain/reset.mjs"
   },
   "workspaces": {
     "packages": [

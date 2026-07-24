@@ -38,10 +38,11 @@ Next.js/React, Docker/Docker Compose, vitest, ESLint, Prettier, `testcontainers`
 | `api/` | Shared types and the `BBoardAPI` class used by both `cli/` and `web/` |
 | `cli/` | Command-line deployment/interaction tool; entrypoints under `cli/src/launcher/` (`deploy.ts`, `preview.ts`, `preprod.ts`, `standalone.ts`) |
 | `web/` | Next.js frontend (App Router); no `src/` dir — `@/*` alias resolves to `web/*` |
-| `scripts/deploy/deploy.mjs` | End-to-end deploy orchestration entrypoint for `npm run deploy` / `npm run contracts:deploy` |
-| `scripts/docker/` | Ephemeral proof-server compose files used by `testkit-js` during deploy (separate from `docker/docker-compose.yml`) |
-| `scripts/doctor.mjs` | Environment health check (`npm run doctor`) |
-| `docker/docker-compose.yml` | Full local dev-stack: node, indexer, proof-server, and (optional, `--profile web`) the frontend |
+| `infra/scripts/deploy/deploy.mjs` | End-to-end deploy orchestration entrypoint for `npm run deploy` / `npm run contracts:deploy` |
+| `infra/scripts/docker/` | `docker:start/stop/reset` wrapper scripts (separate from `infra/docker/docker-compose.yml`) |
+| `cli/proof-server.yml` | Ephemeral proof-server compose file used by `testkit-js` during deploy |
+| `infra/scripts/doctor.mjs` | Environment health check (`npm run doctor`) |
+| `infra/docker/docker-compose.yml` | Full local dev-stack: node, indexer, proof-server, and (optional, `--profile web`) the frontend |
 | `docs/` | `ARCHITECTURE.md`, `DOCKER.md`, `ENVIRONMENT.md`, `TROUBLESHOOTING.md`, `CHANGELOG.md` |
 | `setup.sh` | One-command zero-config bootstrap (`npm run setup`) |
 | `deployment.json` | Generated at repo root after a successful `npm run contracts:deploy` — gitignored, append-only local history of deploys (newest first) |
@@ -139,8 +140,8 @@ back to manual steps if `setup.sh` fails and you need to diagnose why.
 7. **Install git hooks** (step 6/9): if `.git/` exists, write a `pre-commit` hook running
    `npm run --silent lint --workspaces --if-present` (safe to re-run/overwrite).
 8. **Pull Docker images and start local services** (step 7/9): `docker compose -f
-   docker/docker-compose.yml pull node indexer proof-server` (downloads/updates the Midnight node,
-   indexer, and proof-server images), then `docker compose -f docker/docker-compose.yml up -d
+   infra/docker/docker-compose.yml pull node indexer proof-server` (downloads/updates the Midnight node,
+   indexer, and proof-server images), then `docker compose -f infra/docker/docker-compose.yml up -d
    node indexer proof-server`. This both configures and starts the local Midnight Proof Server —
    no separate manual download step exists or is needed. Equivalent standalone command:
    `npm run blockchain:start` (or `npm run docker:start` to also build/start the web container).
@@ -148,7 +149,7 @@ back to manual steps if `setup.sh` fails and you need to diagnose why.
    `curl -f http://localhost:9944/health` (node) until it responds (up to ~2 minutes), then checks
    `http://localhost:8088` (indexer) and `:6300` (proof-server), warning rather than hard-failing
    on the latter two since the node's healthcheck already gates indexer startup via `depends_on:
-   condition: service_healthy` in `docker/docker-compose.yml`. For `preview`/`preprod` deploys,
+   condition: service_healthy` in `infra/docker/docker-compose.yml`. For `preview`/`preprod` deploys,
    connectivity is instead to hosted endpoints baked into `cli/src/config.ts` — no local check
    needed there, the deploy script itself fails loudly if unreachable.
 10. **Run health checks** (step 9/9): `npm run doctor` (equivalently `npm run verify`), which now
@@ -223,7 +224,7 @@ re-verify before moving on.
 ## Deployment Workflow
 
 `npm run contracts:deploy -- --network preview|preprod` (or `preprod`) is the single deploy
-entrypoint. It wraps `scripts/deploy/deploy.mjs`, which performs, in order:
+entrypoint. It wraps `infra/scripts/deploy/deploy.mjs`, which performs, in order:
 
 1. **Compile** — checks Node/Docker/Compact prerequisites; if `contracts/src/managed/bboard/contract`
    is missing, runs `npm run build:contract`; if `cli/dist/launcher` is missing, runs
@@ -361,7 +362,7 @@ git if deleted; that's expected/by design (it's environment-local state).
 Before declaring setup/recovery/a deployment task complete, verify:
 
 - ✓ `npm run doctor` exits 0
-- ✓ Docker services healthy (`docker compose -f docker/docker-compose.yml ps` shows no unhealthy/restarting containers, if the local stack is in use)
+- ✓ Docker services healthy (`docker compose -f infra/docker/docker-compose.yml ps` shows no unhealthy/restarting containers, if the local stack is in use)
 - ✓ Contract compiles (`contracts/src/managed/bboard/contract` exists and `npm run build:contract` exits 0)
 - ✓ Contract deploys successfully when requested (`deployment.json` has a fresh entry, `web/.env.local` has a matching `NEXT_PUBLIC_CONTRACT_ADDRESS`)
 - ✓ Frontend can reach the deployed contract (network IDs match between `web/.env.local` and the browser wallet; `npm run dev` serves without error)

@@ -1,10 +1,10 @@
 # Docker Setup
 
-`docker/docker-compose.yml` defines the full local stack: `node`, `indexer`, `proof-server`, and a
+`infra/docker/docker-compose.yml` defines the full local stack: `node`, `indexer`, `proof-server`, and a
 `web` service (built from the root `Dockerfile`'s `dev` target with hot reload via bind mount).
 
 ```bash
-npm run docker:start   # equivalent to: docker compose -f docker/docker-compose.yml --profile web up -d --build
+npm run docker:start   # equivalent to: docker compose -f infra/docker/docker-compose.yml --profile web up -d --build
 ```
 
 Fixed host ports: node `9944`, indexer `8088`, proof server `6300`, web `3000`.
@@ -17,7 +17,7 @@ docker run -p 3000:3000 bboard-web:prod
 ```
 
 This is separate from the ephemeral, testcontainers-managed proof server that
-`npm run contracts:deploy` spins up per-run (`scripts/docker/proof-server*.yml`) — that one is
+`npm run contracts:deploy` spins up per-run (`cli/proof-server.yml`) — that one is
 managed automatically by the deploy pipeline and needs no manual Docker commands.
 
 ## Other commands
