@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import * as ui from './ui.mjs';
 import { classifyError, printCliError } from './errors.mjs';
 import { ensureIndexerSecret } from './infra.mjs';
-import { checkRequiredPorts, printPortConflicts } from './ports.mjs';
+import { checkRequiredPorts, printPortConflicts, COMPOSE_PROJECT_NAME } from './ports.mjs';
 import { tryStartDocker, recoverPortConflicts } from './recovery.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -62,7 +62,7 @@ export async function runCompose(label, args, { checkPorts = false, requireDaemo
   ensureIndexerSecret(rootDir, { info: ui.info });
 
   try {
-    execSync(`docker compose -f ${composeFile} ${args}`, {
+    execSync(`docker compose -p ${COMPOSE_PROJECT_NAME} -f ${composeFile} ${args}`, {
       stdio: verbose ? 'inherit' : ['ignore', 'pipe', 'pipe'],
       encoding: 'utf-8',
     });

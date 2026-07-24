@@ -9,7 +9,7 @@ import { printBanner, collectAnswers, type CliFlags, type Network } from './prom
 import { downloadTemplate, resolveTemplate } from './downloader.js';
 import { configureProject } from './scaffold.js';
 import { installDependencies } from './installer.js';
-import { initGitRepo } from './git.js';
+import { initGitDir, commitInitial } from './git.js';
 import { runProjectScript } from './setup.js';
 import { CLIError, printError } from './errors.js';
 import {
@@ -122,18 +122,33 @@ async function main(): Promise<void> {
   const pm: PackageManager = detectPackageManager(pmOverride);
   console.log(`  ${logSymbols.success} ${pc.green(`Using ${PACKAGE_MANAGER_LABELS[pm]}`)}`);
 
+  // Git is initialized (but not committed) before install/setup: some templates'
+  // setup scripts install Git hooks and need a .git dir to target.
+  const hasGit = answers.initGit && (await commandExists('git'));
+  if (answers.initGit && !hasGit) {
+    console.log(`  ${logSymbols.warning} ${pc.yellow("Git wasn't found.")}`);
+    console.log('');
+    console.log(pc.dim('  You can initialize the repository later with:'));
+    console.log(`  ${pc.cyan('git init')}`);
+  } else if (hasGit) {
+    await step('Initializing Git', () => initGitDir(answers.targetDir), {
+      successLabel: 'Git initialized'
+    });
+  }
+
   if (answers.installDeps) {
     try {
       await step('Installing dependencies', () => installDependencies(answers.targetDir, pm), {
         successLabel: 'Dependencies installed'
       });
       completed.install = true;
-    } catch {
+    } catch (error) {
       console.log(`  ${logSymbols.warning} ${pc.yellow("Couldn't install project dependencies.")}`);
       console.log('');
       console.log(pc.dim("  Run the following command when you're ready:"));
       console.log(`  ${pc.cyan(`${pm} install`)}`);
       printPackageManagerOverrideHint(pm);
+      if (error instanceof CLIError && error.cause) verbose(String(error.cause));
     }
 
     if (answers.runSetup && completed.install) {
@@ -142,32 +157,25 @@ async function main(): Promise<void> {
           successLabel: 'Environment ready'
         });
         completed.setup = true;
-      } catch {
+      } catch (error) {
         console.log(`  ${logSymbols.warning} ${pc.yellow("Initial setup couldn't be completed.")}`);
         console.log('');
         console.log(pc.dim('  Run:'));
         console.log(`  ${pc.cyan(`${pm} run setup`)}`);
         console.log(pc.dim('  to finish configuring the project.'));
         printPackageManagerOverrideHint(pm);
+        if (error instanceof CLIError && error.cause) verbose(String(error.cause));
       }
     }
   }
 
-  if (answers.initGit) {
-    const hasGit = await commandExists('git');
-    if (!hasGit) {
-      console.log(`  ${logSymbols.warning} ${pc.yellow("Git wasn't found.")}`);
-      console.log('');
-      console.log(pc.dim('  You can initialize the repository later with:'));
-      console.log(`  ${pc.cyan('git init')}`);
-    } else {
-      await step('Initializing Git', () => initGitRepo(answers.targetDir), {
-        successLabel: 'Git initialized',
-        // A failed commit (e.g. missing git identity) shouldn't abort the whole run.
-        tolerateFailure: true
-      });
-      completed.git = true;
-    }
+  if (hasGit) {
+    await step('Creating initial commit', () => commitInitial(answers.targetDir), {
+      successLabel: 'Initial commit created',
+      // A failed commit (e.g. missing git identity) shouldn't abort the whole run.
+      tolerateFailure: true
+    });
+    completed.git = true;
   }
 
   if (answers.runSetup && !answers.installDeps) {

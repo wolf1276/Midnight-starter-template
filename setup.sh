@@ -21,6 +21,18 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
+# Docker Compose project name, derived from this project's own package.json `name` (same logic
+# as infra/scripts/lib/ports.mjs's COMPOSE_PROJECT_NAME) — scopes every container/network/volume
+# this stack creates to this project, so multiple scaffolded Midnight projects never collide.
+export COMPOSE_PROJECT_NAME="$(node -e "
+  const p = require('./package.json').name
+    .replace(/^@[^/]+\//, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^[-_]+/, '') || 'midnight-app';
+  process.stdout.write(p);
+")"
+
 # Colors are disabled when NO_COLOR is set or output isn't a terminal, matching cli/src/ui.ts.
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   BOLD='\033[1m'

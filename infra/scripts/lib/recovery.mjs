@@ -6,7 +6,7 @@ import { execSync, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { platform } from 'node:os';
 import * as ui from './ui.mjs';
-import { checkPort } from './ports.mjs';
+import { checkPort, COMPOSE_PROJECT_NAME } from './ports.mjs';
 
 const sh = (cmd, opts = {}) => execSync(cmd, { encoding: 'utf-8', shell: true, stdio: ['ignore', 'pipe', 'pipe'], ...opts });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -79,8 +79,8 @@ export async function tryStartDocker({ timeoutMs = 60000, pollIntervalMs = 2000 
 /** Restarts a named Docker Compose service once. Returns recovered: true only if it becomes "running" afterward. */
 export function tryRestartContainer(composeFile, service) {
   try {
-    sh(`docker compose -f ${composeFile} restart ${service}`);
-    const out = sh(`docker compose -f ${composeFile} ps --format '{{.Service}} {{.State}}' ${service}`);
+    sh(`docker compose -p ${COMPOSE_PROJECT_NAME} -f ${composeFile} restart ${service}`);
+    const out = sh(`docker compose -p ${COMPOSE_PROJECT_NAME} -f ${composeFile} ps --format '{{.Service}} {{.State}}' ${service}`);
     const running = out.split('\n').some((line) => line.startsWith(`${service} `) && /running/i.test(line));
     return { recovered: running, detail: running ? 'restarted' : 'restart did not bring it to a running state' };
   } catch (e) {

@@ -10,7 +10,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { DockerError, ProofServerError, classifyError, printCliError } from './errors.mjs';
-import { checkRequiredPorts, printPortConflicts } from './ports.mjs';
+import { checkPort, checkRequiredPorts, printPortConflicts, COMPOSE_PROJECT_NAME } from './ports.mjs';
 import { tryRestartContainer, tryStartDocker, recoverPortConflicts } from './recovery.mjs';
 
 const sh = (cmd, opts = {}) => execSync(cmd, { encoding: 'utf-8', shell: true, stdio: ['ignore', 'pipe', 'pipe'], ...opts });
@@ -82,7 +82,7 @@ export function ensureIndexerSecret(rootDir, fmt = { info: () => {} }) {
 function composeState(composeFile) {
   const state = new Map();
   try {
-    const out = sh(`docker compose -f ${composeFile} ps --format '{{.Service}} {{.State}}'`);
+    const out = sh(`docker compose -p ${COMPOSE_PROJECT_NAME} -f ${composeFile} ps --format '{{.Service}} {{.State}}'`);
     for (const line of out.split('\n').filter(Boolean)) {
       const [service, ...rest] = line.split(' ');
       state.set(service, rest.join(' '));
@@ -91,7 +91,17 @@ function composeState(composeFile) {
   return state;
 }
 
+// A port responding is not proof this project's own container is what's answering — some
+// other project's (or an unrelated process's) stack can be squatting on the same port. Gate
+// every probe on checkPort()'s ownership signal first, so `healthy` never comes back true for
+// someone else's service.
+function ownsPort(port) {
+  const result = checkPort(port);
+  return !result.free && result.owner?.kind === 'docker' && result.owner.ours;
+}
+
 function checkRpc() {
+  if (!ownsPort(9944)) return false;
   try {
     sh('curl -sf http://localhost:9944/health');
     return true;
@@ -101,6 +111,7 @@ function checkRpc() {
 }
 
 function checkIndexer() {
+  if (!ownsPort(8088)) return false;
   try {
     const code = sh("curl -s -o /dev/null -w '%{http_code}' http://localhost:8088").trim();
     return /^\d{3}$/.test(code);
@@ -110,6 +121,7 @@ function checkIndexer() {
 }
 
 function checkProofServer() {
+  if (!ownsPort(6300)) return false;
   try {
     sh('curl -sf http://localhost:6300 > /dev/null 2>&1 || nc -z localhost 6300');
     return true;
@@ -152,7 +164,7 @@ export async function ensureLocalMidnightServices(rootDir, fmt, verbose) {
     if (stopped.length) fmt.info(`Starting container(s): ${stopped.join(', ')}...`);
     fmt.info('Running Docker Compose...');
     try {
-      sh(`docker compose -f ${composeFile} up -d ${required.join(' ')}`, {
+      sh(`docker compose -p ${COMPOSE_PROJECT_NAME} -f ${composeFile} up -d ${required.join(' ')}`, {
         stdio: verbose ? 'inherit' : ['ignore', 'pipe', 'pipe'],
       });
     } catch (e) {

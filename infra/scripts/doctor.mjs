@@ -8,7 +8,15 @@ import { fileURLToPath } from 'node:url';
 import { versions } from './lib/versions.mjs';
 import * as ui from './lib/ui.mjs';
 import { checks as preflightChecks } from './lib/preflight.mjs';
-import { checkRequiredPorts } from './lib/ports.mjs';
+import { checkPort, checkRequiredPorts, COMPOSE_PROJECT_NAME } from './lib/ports.mjs';
+
+// A port answering isn't proof this project's own container is behind it — another project's
+// stack (or an unrelated process) can be bound to the same port. Same ownership signal used by
+// docker-recover.mjs / ports.mjs, so doctor never reports "healthy" based on someone else's service.
+function ownsPort(port) {
+  const result = checkPort(port);
+  return !result.free && result.owner?.kind === 'docker' && result.owner.ours;
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, '..', '..');
@@ -119,7 +127,7 @@ check(
   () => {
     let out;
     try {
-      out = sh(`docker compose -f ${resolve(rootDir, 'infra', 'docker', 'docker-compose.yml')} ps --format '{{.Service}} {{.State}}'`);
+      out = sh(`docker compose -p ${COMPOSE_PROJECT_NAME} -f ${resolve(rootDir, 'infra', 'docker', 'docker-compose.yml')} ps --format '{{.Service}} {{.State}}'`);
     } catch {
       throw new Error('could not query compose state');
     }
@@ -142,6 +150,7 @@ check(
 check(
   'Node RPC health (http://localhost:9944/health)',
   () => {
+    if (!ownsPort(9944)) throw new Error('port 9944 is not owned by this project\'s own container');
     try {
       return sh('curl -sf http://localhost:9944/health');
     } catch {
@@ -154,6 +163,7 @@ check(
 check(
   'Indexer reachable (http://localhost:8088)',
   () => {
+    if (!ownsPort(8088)) throw new Error('port 8088 is not owned by this project\'s own container');
     try {
       const code = sh("curl -s -o /dev/null -w '%{http_code}' http://localhost:8088");
       if (!/^\d{3}$/.test(code)) throw new Error('no response');
@@ -168,6 +178,7 @@ check(
 check(
   'Proof server reachable (:6300)',
   () => {
+    if (!ownsPort(6300)) throw new Error('port 6300 is not owned by this project\'s own container');
     try {
       sh('curl -sf http://localhost:6300 || nc -z localhost 6300');
       return 'reachable';

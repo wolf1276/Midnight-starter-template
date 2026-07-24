@@ -3,6 +3,9 @@
 // describePortOwner() in errors.mjs / cli/src/errors.ts, generalized into a structured result.
 
 import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { versions } from './versions.mjs';
 import { color } from './ui.mjs';
 
@@ -10,19 +13,32 @@ function sh(cmd) {
   return execSync(cmd, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
 }
 
-// This project's containers are all named with this prefix (see infra/docker/docker-compose.yml's
-// `container_name:` entries) — used to tell "our stack being restarted" apart from some other
-// project's container that happens to be squatting on the same port.
-//
-// Name matching over Compose project labels (`com.docker.compose.project`) is deliberate here:
-// the compose file has no top-level `name:`, so Compose derives that label from the directory
-// basename ("docker" — infra/docker/), which is generic and would collide with any other repo's
-// compose file living in a directory of the same name. The explicit `container_name: bboard-*`
-// values are unique to this repo and cannot collide, making them the more reliable identity
-// signal — not merely equivalent to the label. If the compose file later adds a top-level
-// `name:` (making the project label repo-specific), prefer matching on
-// `com.docker.compose.project` at that point.
-export const PROJECT_CONTAINER_PREFIX = 'bboard-';
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const rootDir = resolve(__dirname, '..', '..', '..');
+
+// Each scaffolded project's package.json `name` becomes its Docker Compose project name — this
+// is what makes container/network/volume names unique per project on the same machine (Compose
+// scopes generated resource names to `-p`/COMPOSE_PROJECT_NAME), replacing the old hardcoded
+// `bboard-*` container names that collided across multiple scaffolded projects.
+function deriveProjectName() {
+  try {
+    const pkg = JSON.parse(readFileSync(resolve(rootDir, 'package.json'), 'utf-8'));
+    return (
+      pkg.name
+        .replace(/^@[^/]+\//, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, '-')
+        .replace(/^[-_]+/, '') || 'midnight-app'
+    );
+  } catch {
+    return 'midnight-app';
+  }
+}
+
+export const COMPOSE_PROJECT_NAME = deriveProjectName();
+// Every `docker compose` invocation in this process tree (execSync inherits process.env) picks
+// this up automatically — no need to thread `-p ${COMPOSE_PROJECT_NAME}` through every call site.
+process.env.COMPOSE_PROJECT_NAME ??= COMPOSE_PROJECT_NAME;
 
 // Any image published under this org is a Midnight stack component — used to tell "another
 // Midnight project's container happens to be on this port" apart from a truly unrelated one.
@@ -30,17 +46,17 @@ const MIDNIGHT_IMAGE_PREFIX = 'midnightntwrk/';
 
 function findDockerOwner(port) {
   try {
-    const out = sh(`docker ps --format "{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Ports}}"`);
+    const out = sh(`docker ps --format "{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Ports}}\t{{.Label \\"com.docker.compose.project\\"}}"`);
     for (const line of out.split('\n')) {
       if (!line) continue;
-      const [id, name, image, ports] = line.split('\t');
+      const [id, name, image, ports, project] = line.split('\t');
       if (ports && ports.includes(`:${port}->`)) {
         return {
           kind: 'docker',
           id,
           name,
           image,
-          ours: name.startsWith(PROJECT_CONTAINER_PREFIX),
+          ours: project === COMPOSE_PROJECT_NAME,
           midnight: image.startsWith(MIDNIGHT_IMAGE_PREFIX),
         };
       }

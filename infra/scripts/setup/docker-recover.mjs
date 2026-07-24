@@ -5,18 +5,28 @@
 //   - if node/indexer/proof-server are already up, say so and let setup.sh skip straight to
 //     health checks (no pull, no recreate, no downtime for a dev who's mid-session).
 //   - if any of OUR containers exist but are stopped (interrupted previous run), remove just
-//     those so `docker compose up` starts clean instead of erroring on a stale container name.
+//     those so `docker compose up` starts clean instead of erroring on a stale container.
 //   - if a required port is held by anything else, identify exactly what (another Midnight
 //     project's container, an unrelated container, or a plain process) and exit non-zero with
 //     precise recovery instructions — never touched automatically.
 //
-// No global prune, no volume deletion, no touching containers outside the bboard-* names.
+// "This project's own containers" means the ones in this project's Compose project (see
+// infra/scripts/lib/ports.mjs's COMPOSE_PROJECT_NAME, derived from package.json `name`) — never
+// a hardcoded name, so multiple scaffolded projects never collide or step on each other here.
+//
+// No global prune, no volume deletion, no touching containers outside this Compose project.
 //
 // Exit codes: 0 = proceed with pull/up. 3 = stack already running, skip pull/up. 1 = fatal,
 // diagnostics already printed to stderr.
 import { execSync } from 'node:child_process';
-import { checkPort, PROJECT_CONTAINER_PREFIX, formatPortConflict } from '../lib/ports.mjs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { checkPort, formatPortConflict, COMPOSE_PROJECT_NAME } from '../lib/ports.mjs';
 import * as ui from '../lib/ui.mjs';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const rootDir = resolve(__dirname, '..', '..', '..');
+const composeFile = resolve(rootDir, 'infra', 'docker', 'docker-compose.yml');
 
 const SERVICES = { node: 9944, indexer: 8088, 'proof-server': 6300 };
 
@@ -28,25 +38,28 @@ function sh(cmd) {
   }
 }
 
-function containerStatus(name) {
-  // Empty string means the container doesn't exist at all.
-  return sh(`docker inspect -f '{{.State.Status}}' ${name}`);
+function serviceState() {
+  const state = new Map();
+  const out = sh(`docker compose -p ${COMPOSE_PROJECT_NAME} -f ${composeFile} ps --all --format '{{.Service}} {{.State}}'`);
+  for (const line of out.split('\n').filter(Boolean)) {
+    const [service, ...rest] = line.split(' ');
+    state.set(service, rest.join(' '));
+  }
+  return state;
 }
 
-const status = Object.fromEntries(
-  Object.keys(SERVICES).map((service) => [service, containerStatus(`${PROJECT_CONTAINER_PREFIX}${service}`)]),
-);
+const state = serviceState();
 
-if (Object.values(status).every((s) => s === 'running')) {
+if (Object.keys(SERVICES).every((service) => /running/i.test(state.get(service) ?? ''))) {
   ui.success('Midnight development stack already running.');
   process.exit(3);
 }
 
-for (const [service, state] of Object.entries(status)) {
-  if (state && state !== 'running') {
-    const name = `${PROJECT_CONTAINER_PREFIX}${service}`;
-    ui.warn(`Removing stale container ${name} (${state}) from a previous run...`);
-    sh(`docker rm -f ${name}`);
+for (const service of Object.keys(SERVICES)) {
+  const current = state.get(service);
+  if (current && !/running/i.test(current)) {
+    ui.warn(`Removing stale ${service} container (${current}) from a previous run...`);
+    sh(`docker compose -p ${COMPOSE_PROJECT_NAME} -f ${composeFile} rm -f ${service}`);
   }
 }
 
@@ -54,8 +67,7 @@ let fatal = false;
 for (const [service, port] of Object.entries(SERVICES)) {
   const result = checkPort(port);
   if (result.free) continue;
-  const ourName = `${PROJECT_CONTAINER_PREFIX}${service}`;
-  if (result.owner?.kind === 'docker' && result.owner.name === ourName) continue; // being recreated
+  if (result.owner?.kind === 'docker' && result.owner.ours) continue; // being recreated
   fatal = true;
   for (const line of formatPortConflict({ port, service, owner: result.owner })) {
     process.stderr.write(`${line}\n`);
