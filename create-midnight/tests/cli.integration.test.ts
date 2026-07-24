@@ -153,10 +153,8 @@ describe('create-midnight CLI (real GitHub download)', () => {
     );
   }
 
-  it.skipIf(!shouldRun)('downloads, extracts, and configures the real starter template from GitHub via --ref main', () => {
-    // The upstream repo has no version tags yet (see the version-locking test below),
-    // so the real-network happy path is exercised via an explicit --ref override.
-    const result = runReal(['network-app', '--yes', '--no-install', '--no-setup', '--no-git', '--ref', 'main']);
+  it.skipIf(!shouldRun)('downloads, extracts, and configures the real version-locked starter template from GitHub (no --ref needed)', () => {
+    const result = runReal(['network-app', '--yes', '--no-install', '--no-setup', '--no-git']);
 
     expect(result.status).toBe(0);
     const projectDir = path.join(workDir, 'network-app');
@@ -165,12 +163,23 @@ describe('create-midnight CLI (real GitHub download)', () => {
     expect(fs.existsSync(path.join(projectDir, '.git'))).toBe(false);
   });
 
-  it.skipIf(!shouldRun)('shows the friendly "compatible template version not found" error against the real repo (no matching tag exists yet)', () => {
-    const result = runReal(['no-tag-app', '--yes', '--no-install', '--no-setup', '--no-git']);
+  it.skipIf(!shouldRun)('lets --ref override the version-locked template with an explicit branch', () => {
+    const result = runReal(['network-ref-app', '--yes', '--no-install', '--no-setup', '--no-git', '--ref', 'main']);
+
+    expect(result.status).toBe(0);
+    const projectDir = path.join(workDir, 'network-ref-app');
+    expect(fs.existsSync(path.join(projectDir, 'package.json'))).toBe(true);
+    expect(fs.existsSync(path.join(projectDir, 'web', '.env.local'))).toBe(true);
+  });
+
+  it.skipIf(!shouldRun)('shows a friendly error for a nonexistent --ref against the real repo', () => {
+    // The "compatible template version not found" message is specific to the default
+    // version-locked path and is covered without network access in version-lock.test.ts;
+    // an explicit --ref that doesn't exist takes the generic download-failure path.
+    const result = runReal(['no-tag-app', '--yes', '--no-install', '--no-setup', '--no-git', '--ref', 'v99.99.99']);
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain('Compatible template version not found');
-    expect(result.stderr).toContain('Repository: wolf1276/Midnight-starter-template');
+    expect(result.stderr).toMatch(/Failed to download template.*v99\.99\.99/);
     expect(result.stderr).not.toContain('at CLIError');
   });
 });
