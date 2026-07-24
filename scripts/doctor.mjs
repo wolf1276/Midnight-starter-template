@@ -16,7 +16,11 @@ const verbose = process.argv.includes('--verbose') || process.argv.includes('--d
 
 const results = [];
 
-function check(name, fn, { category = 'Environment', fix } = {}) {
+function check(name, fn, { category = 'Environment', fix, skip } = {}) {
+  if (skip) {
+    results.push({ name, category, ok: true, detail: 'skipped (not applicable here)' });
+    return;
+  }
   try {
     const detail = fn();
     results.push({ name, category, ok: true, detail });
@@ -199,7 +203,9 @@ check(
     if (!existsSync(resolve(rootDir, '.git', 'hooks', 'pre-commit'))) throw new Error('missing');
     return 'installed';
   },
-  { category: 'Environment', fix: './setup.sh' },
+  // Hooks only matter for someone committing from this checkout; an ephemeral CI runner
+  // never does, so don't fail the whole health check over it there.
+  { category: 'Environment', fix: './setup.sh', skip: Boolean(process.env.CI) },
 );
 
 check(
