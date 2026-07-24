@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-07-24
+
+### Added
+
+- `npm run deploy -- --network local` deploys against a fully local
+  Midnight stack (node, indexer, proof server via Docker) using a
+  pre-funded genesis wallet — no faucet or public RPC required. Local
+  is now the default/recommended choice in the interactive network
+  prompt, with Preview and Preprod kept as optional public-network
+  targets. `doctor.mjs` gains a Deployments section reporting the
+  latest deployment recorded per network.
+
 ## [1.2.7] - 2026-07-24
 
 ### Added
