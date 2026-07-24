@@ -152,7 +152,10 @@ export const checks = {
         { cause: e },
       );
     }
-    const active = out.split('\n').find((l) => l.includes('→') || l.includes('*'));
+    // `compact list` marks the default with a "→" glyph, but when stdout isn't a TTY (as here,
+    // via execSync) some versions of the CLI print the literal escape text "\u{2192}" instead of
+    // the actual arrow character — match both so the check doesn't false-negative in that case.
+    const active = out.split('\n').find((l) => l.includes('→') || l.includes('\\u{2192}') || l.includes('*'));
     if (!active) {
       throw new CompactError({
         title: 'Compact Toolchain Not Selected',
