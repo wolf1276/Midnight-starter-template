@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import validateNpmName from 'validate-npm-package-name';
 import { CLIError } from './errors.js';
 import { verbose } from './logger.js';
@@ -79,6 +80,16 @@ export async function detectPackageManager(
     if (await checkCommand(pm)) return pm;
   }
   return 'npm';
+}
+
+/** The generated project's package.json scripts, or {} if unreadable. */
+export function readPackageScripts(targetDir: string): Record<string, string> {
+  try {
+    const pkg = JSON.parse(readFileSync(path.join(targetDir, 'package.json'), 'utf8'));
+    return pkg.scripts ?? {};
+  } catch {
+    return {};
+  }
 }
 
 export interface ProjectNameValidation {

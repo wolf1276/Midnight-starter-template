@@ -73,8 +73,11 @@ describe('create-midnight CLI (local template fixture)', () => {
   it('runs project setup when --setup is passed (requires --install, per CLI semantics)', () => {
     const result = runCli(['setup-app', '--yes', '--install', '--setup', '--no-git']);
     expect(result.status).toBe(0);
-    // ora writes step/spinner status (e.g. "Environment ready") to stderr, not stdout.
-    expect(result.stderr).toContain('Environment ready');
+    // Install + setup are now validated together per package manager before
+    // committing to one; success shows up as "Using <pm>" plus a completed checklist.
+    expect(result.stderr).toContain('Using Bun');
+    expect(result.stdout).toMatch(/✓ Dependencies installed/);
+    expect(result.stdout).toMatch(/✓ Setup completed/);
   });
 
   it('warns and skips setup when --setup is passed without --install', () => {

@@ -10,7 +10,8 @@ import { downloadTemplate, resolveTemplate } from './downloader.js';
 import { configureProject } from './scaffold.js';
 import { installDependencies } from './installer.js';
 import { initGitRepo } from './git.js';
-import { runProjectSetup } from './setup.js';
+import { runProjectScript } from './setup.js';
+import { detectVerifyScript, selectWorkingPackageManager, type PmAttempt } from './pmSelect.js';
 import { CLIError, printError } from './errors.js';
 import {
   assertTargetAvailable,
@@ -93,10 +94,7 @@ async function main(): Promise<void> {
         : opts.useBun
           ? 'bun'
           : undefined;
-  const pm = await detectPackageManager(pmOverride);
 
-  console.log('');
-  console.log(`  ${logSymbols.success} ${pc.green(`Using ${PACKAGE_MANAGER_LABELS[pm]}`)}`);
   console.log('');
   console.log(pc.dim('━'.repeat(28)));
   console.log('');
@@ -120,7 +118,18 @@ async function main(): Promise<void> {
       network: answers.network
     }), { successLabel: 'Project configured' });
 
-  if (answers.installDeps) {
+  let pm: PackageManager;
+
+  if (!answers.installDeps) {
+    // Nothing will actually run, so there's nothing to validate — just report
+    // whichever package manager the user would use by hand.
+    pm = await detectPackageManager(pmOverride);
+    console.log(`  ${logSymbols.success} ${pc.green(`Using ${PACKAGE_MANAGER_LABELS[pm]}`)}`);
+  } else if (pmOverride) {
+    // An explicit --use-* flag is the user overriding our judgment; honor it
+    // rather than silently switching to something else.
+    pm = pmOverride;
+    console.log(`  ${logSymbols.success} ${pc.green(`Using ${PACKAGE_MANAGER_LABELS[pm]}`)}`);
     try {
       await step('Installing dependencies', () => installDependencies(answers.targetDir, pm), {
         successLabel: 'Dependencies installed'
@@ -132,6 +141,42 @@ async function main(): Promise<void> {
       console.log(pc.dim("  Run the following command when you're ready:"));
       console.log(`  ${pc.cyan(`${pm} install`)}`);
       printPackageManagerOverrideHint(pm);
+    }
+
+    if (answers.runSetup && completed.install) {
+      try {
+        await step('Running setup', () => runProjectScript(answers.targetDir, pm, 'setup'), {
+          successLabel: 'Environment ready'
+        });
+        completed.setup = true;
+      } catch {
+        console.log(`  ${logSymbols.warning} ${pc.yellow("Initial setup couldn't be completed.")}`);
+        console.log('');
+        console.log(pc.dim('  Run:'));
+        console.log(`  ${pc.cyan(`${pm} run setup`)}`);
+        console.log(pc.dim('  to finish configuring the project.'));
+        printPackageManagerOverrideHint(pm);
+      }
+    }
+  } else {
+    const spinner = ora({ text: 'Selecting a package manager (Bun → pnpm → Yarn → npm)', color: 'magenta' }).start();
+    const verifyScript = answers.runSetup ? detectVerifyScript(answers.targetDir) : undefined;
+    const selection = await selectWorkingPackageManager(answers.targetDir, {
+      runSetup: Boolean(answers.runSetup),
+      verifyScript
+    });
+
+    if (selection.pm) {
+      pm = selection.pm;
+      completed.install = true;
+      completed.setup = Boolean(answers.runSetup);
+      spinner.succeed(`Using ${PACKAGE_MANAGER_LABELS[pm]}`);
+      printSkippedAttempts(selection.attempts);
+    } else {
+      spinner.fail('No package manager could complete initialization');
+      printFailureSummary(selection.attempts, answers.runSetup);
+      // Nothing actually installed; default to npm purely for display purposes below.
+      pm = 'npm';
     }
   }
 
@@ -152,23 +197,7 @@ async function main(): Promise<void> {
     }
   }
 
-  if (answers.runSetup && answers.installDeps) {
-    if (completed.install) {
-      try {
-        await step('Running setup', () => runProjectSetup(answers.targetDir, pm), {
-          successLabel: 'Environment ready'
-        });
-        completed.setup = true;
-      } catch {
-        console.log(`  ${logSymbols.warning} ${pc.yellow("Initial setup couldn't be completed.")}`);
-        console.log('');
-        console.log(pc.dim('  Run:'));
-        console.log(`  ${pc.cyan(`${pm} run setup`)}`);
-        console.log(pc.dim('  to finish configuring the project.'));
-        printPackageManagerOverrideHint(pm);
-      }
-    }
-  } else if (answers.runSetup && !answers.installDeps) {
+  if (answers.runSetup && !answers.installDeps) {
     console.log(`  ${logSymbols.warning} ${pc.yellow('Skipping setup: --setup requires dependencies to be installed (remove --no-install).')}`);
   }
 
@@ -184,6 +213,39 @@ function printPackageManagerOverrideHint(pm: PackageManager): void {
   console.log('');
   console.log(pc.dim(`  If ${PACKAGE_MANAGER_LABELS[pm]} keeps failing, retry with a different package manager:`));
   console.log(`  ${pc.cyan('--use-npm')} or ${pc.cyan('--use-pnpm')}`);
+}
+
+const STAGE_LABEL: Record<PmAttempt['stage'], string> = {
+  'not-installed': 'not installed',
+  install: 'dependency install failed',
+  setup: 'setup script failed',
+  verify: 'project scripts failed'
+};
+
+/** Reports package managers that were skipped before landing on a working one. */
+function printSkippedAttempts(attempts: PmAttempt[]): void {
+  const failures = attempts.filter((a) => a.stage !== 'not-installed');
+  if (!failures.length) return;
+  console.log('');
+  console.log(pc.dim('  Skipped:'));
+  for (const attempt of failures) {
+    console.log(pc.dim(`  - ${PACKAGE_MANAGER_LABELS[attempt.pm]}: ${STAGE_LABEL[attempt.stage]}`));
+  }
+}
+
+/** Every candidate failed — leave the user with a full picture, not a guess. */
+function printFailureSummary(attempts: PmAttempt[], runSetup: boolean): void {
+  console.log('');
+  console.log(pc.yellow('  No package manager could fully initialize this project:'));
+  console.log('');
+  for (const attempt of attempts) {
+    const detail = attempt.detail ? ` — ${attempt.detail}` : '';
+    console.log(`  ${pc.dim('-')} ${PACKAGE_MANAGER_LABELS[attempt.pm]}: ${STAGE_LABEL[attempt.stage]}${detail}`);
+  }
+  console.log('');
+  console.log(pc.dim('  To continue manually, install one of these package managers and run:'));
+  console.log(`  ${pc.cyan('npm install')}${runSetup ? `\n  ${pc.cyan('npm run setup')}` : ''}`);
+  console.log(pc.dim('  (substitute pnpm/yarn/bun as appropriate)'));
 }
 
 interface StepOptions {
