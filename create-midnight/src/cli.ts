@@ -17,7 +17,9 @@ import {
   assertTargetAvailable,
   commandExists,
   detectPackageManager,
+  formatRunCommand,
   PACKAGE_MANAGER_LABELS,
+  readPackageScripts,
   type PackageManager
 } from './utils.js';
 import { setVerbose, verbose } from './logger.js';
@@ -301,14 +303,23 @@ function printSuccessScreen(
   console.log(`  ${check(completed.git)} Git initialized`);
   console.log(`  ${check(completed.setup)} Setup completed`);
   console.log('');
+  const scripts = readPackageScripts(answers.targetDir);
+  const devScript = scripts.dev ? 'dev' : undefined;
+  const deployScript = scripts.deploy ? 'deploy' : scripts['contracts:deploy'] ? 'contracts:deploy' : undefined;
+
   console.log(pc.bold('Next steps'));
   console.log(`  ${pc.cyan(`cd ${answers.projectName}`)}`);
-  console.log(`  ${pc.cyan(`${pm} run dev`)}`);
   console.log('');
-  console.log(pc.bold('Deploy your first contract'));
-  console.log(`  ${pc.cyan('cd contracts')}`);
-  console.log(`  ${pc.cyan(`${pm} run deploy`)}`);
-  console.log('');
+  if (devScript) {
+    console.log(pc.bold('Start the app'));
+    console.log(`  ${pc.cyan(formatRunCommand(pm, devScript))}`);
+    console.log('');
+  }
+  if (deployScript) {
+    console.log(pc.bold('Deploy your first contract'));
+    console.log(`  ${pc.cyan(formatRunCommand(pm, deployScript))}`);
+    console.log('');
+  }
   console.log(pc.dim('━'.repeat(28)));
   console.log('');
   console.log(pc.bold('Useful links'));

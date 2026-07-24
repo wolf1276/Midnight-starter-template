@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { detectPackageManager, toPackageName, validateProjectName } from '../src/utils.js';
+import { detectPackageManager, formatRunCommand, toPackageName, validateProjectName } from '../src/utils.js';
+import type { PackageManager } from '../src/utils.js';
 
 /** Simulates only the given executables being present on PATH. */
 function checkerFor(available: string[]) {
@@ -78,5 +79,22 @@ describe('toPackageName', () => {
 
   it('falls back to a default name when slugification yields nothing usable', () => {
     expect(toPackageName('!!!')).toBe('my-midnight-app');
+  });
+});
+
+describe('formatRunCommand', () => {
+  const managers: PackageManager[] = ['npm', 'pnpm', 'yarn', 'bun'];
+
+  it('never hardcodes bun for the other package managers', () => {
+    for (const pm of managers) {
+      expect(formatRunCommand(pm, 'dev')).toBe(`${pm} run dev`);
+    }
+  });
+
+  it('prints the correct command for each package manager', () => {
+    expect(formatRunCommand('npm', 'deploy')).toBe('npm run deploy');
+    expect(formatRunCommand('pnpm', 'deploy')).toBe('pnpm run deploy');
+    expect(formatRunCommand('yarn', 'deploy')).toBe('yarn run deploy');
+    expect(formatRunCommand('bun', 'deploy')).toBe('bun run deploy');
   });
 });

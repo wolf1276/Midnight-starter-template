@@ -77,6 +77,28 @@ describe('create-midnight CLI (local template fixture)', () => {
     expect(fs.existsSync(path.join(projectDir, 'SUPPORT.md'))).toBe(false);
   });
 
+  it('prints next-step commands derived from the generated package.json, not hardcoded paths', () => {
+    const result = runCli([
+      'next-steps-app',
+      '--yes',
+      '--no-install',
+      '--no-setup',
+      '--no-git',
+      '--use-npm'
+    ]);
+
+    expect(result.status).toBe(0);
+    // The fixture template's root package.json defines "dev" and "deploy" scripts
+    // directly (no per-subdirectory scripts) — the screen must reflect exactly that,
+    // not a hardcoded `cd web`/`cd contracts` layout from an earlier project shape.
+    expect(result.stdout).toContain('cd next-steps-app');
+    expect(result.stdout).toContain('npm run dev');
+    expect(result.stdout).toContain('npm run deploy');
+    expect(result.stdout).not.toContain('cd web');
+    expect(result.stdout).not.toContain('cd contracts');
+    expect(result.stdout).not.toContain('bun run');
+  });
+
   it('runs project setup when --setup is passed (requires --install, per CLI semantics)', () => {
     const result = runCli(['setup-app', '--yes', '--install', '--setup', '--no-git']);
     expect(result.status).toBe(0);

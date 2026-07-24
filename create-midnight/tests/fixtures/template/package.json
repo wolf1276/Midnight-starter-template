@@ -11,6 +11,8 @@
   },
   "homepage": "https://github.com/wolf1276/Midnight-starter-template#readme",
   "scripts": {
-    "setup": "node -e \"console.log('setup ran')\""
+    "setup": "node -e \"console.log('setup ran')\"",
+    "dev": "node -e \"console.log('dev ran')\"",
+    "deploy": "node -e \"console.log('deploy ran')\""
   }
 }

@@ -92,6 +92,11 @@ export function readPackageScripts(targetDir: string): Record<string, string> {
   }
 }
 
+/** npm, pnpm, Yarn, and Bun all understand `<pm> run <script>`, so no per-manager branching is needed. */
+export function formatRunCommand(pm: PackageManager, script: string): string {
+  return `${pm} run ${script}`;
+}
+
 export interface ProjectNameValidation {
   valid: boolean;
   problems?: string[];

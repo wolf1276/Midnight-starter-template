@@ -5,6 +5,18 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-07-24
+
+### Fixed
+
+- The completion screen's "Next steps" no longer prints a hardcoded
+  `cd contracts` / `bun run dev` / `bun run deploy` workflow left over from an
+  earlier project layout. It now reads the generated project's own
+  `package.json` scripts (`dev`, `deploy`/`contracts:deploy`) and prints them
+  with whichever package manager was actually selected (npm, pnpm, Yarn, or
+  Bun), so the printed commands stay correct if the project layout changes
+  again.
+
 ## [1.1.1] - 2026-07-24
 
 ### Fixed
