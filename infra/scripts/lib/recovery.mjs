@@ -3,10 +3,13 @@
 // callers decide whether to proceed or surface the original failure.
 
 import { execSync, spawn } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { platform } from 'node:os';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir, platform } from 'node:os';
+import { join } from 'node:path';
 import * as ui from './ui.mjs';
 import { checkPort, COMPOSE_PROJECT_NAME } from './ports.mjs';
+
+const DOCKER_DESKTOP_SETTINGS = join(homedir(), '.docker', 'desktop', 'settings-store.json');
 
 const sh = (cmd, opts = {}) => execSync(cmd, { encoding: 'utf-8', shell: true, stdio: ['ignore', 'pipe', 'pipe'], ...opts });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -143,6 +146,63 @@ export async function stopForeignMidnightProject(projectName, fmt) {
     fmt.warn(`Could not fully stop project "${projectName}" (${e.message ?? e}).`);
     return false;
   }
+}
+
+/** Whether the local Docker daemon is Docker Desktop (as opposed to a native Linux dockerd) —
+ *  only Docker Desktop has a VM memory allocation that can be raised via its settings file. */
+export function isDockerDesktop() {
+  try {
+    return sh(`docker info --format '{{.OperatingSystem}}'`).includes('Docker Desktop');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Raises Docker Desktop's VM memory allocation by editing its settings file and restarting it —
+ * the only mechanism available (there is no `docker desktop` CLI subcommand for this). Preserves
+ * every other existing key in the settings file. Never throws; the caller decides whether to
+ * fall back to the manual "Settings → Resources → Memory" instructions.
+ */
+export async function tryIncreaseDockerMemory(targetGiB, fmt) {
+  if (!existsSync(DOCKER_DESKTOP_SETTINGS)) {
+    return { recovered: false, detail: `Docker Desktop settings file not found at ${DOCKER_DESKTOP_SETTINGS}` };
+  }
+
+  let settings;
+  try {
+    settings = JSON.parse(readFileSync(DOCKER_DESKTOP_SETTINGS, 'utf-8'));
+  } catch (e) {
+    return { recovered: false, detail: `could not read Docker Desktop settings (${e.message ?? e})` };
+  }
+
+  try {
+    writeFileSync(DOCKER_DESKTOP_SETTINGS, JSON.stringify({ ...settings, memoryMiB: targetGiB * 1024 }, null, 2));
+  } catch (e) {
+    return { recovered: false, detail: `could not write Docker Desktop settings (${e.message ?? e})` };
+  }
+
+  fmt.info(`Set Docker Desktop memory allocation to ${targetGiB}GB — restarting Docker Desktop...`);
+  try {
+    sh('docker desktop restart');
+  } catch (e) {
+    return { recovered: false, detail: `\`docker desktop restart\` failed (${e.message ?? e})` };
+  }
+
+  const deadline = Date.now() + 60000;
+  while (Date.now() < deadline) {
+    await sleep(2000);
+    try {
+      const bytes = Number(sh(`docker info --format '{{.MemTotal}}'`));
+      const gb = bytes / 1024 ** 3;
+      if (bytes && gb >= targetGiB - 0.1) {
+        return { recovered: true, detail: `${gb.toFixed(1)}GB` };
+      }
+    } catch {
+      // Docker Desktop still restarting — keep polling.
+    }
+  }
+  return { recovered: false, detail: 'Docker Desktop did not come back up with the new allocation within 60s' };
 }
 
 /**
