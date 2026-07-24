@@ -5,6 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.6] - 2026-07-24
+
+### Fixed
+
+- `npm run deploy` now sizes the wallet-sync child process's heap off the
+  machine's actual free memory at run time (floored at the previous fixed
+  4096MB/8192MB preview/preprod minimums), instead of always using the fixed
+  minimum, so machines with more headroom get a bigger heap automatically.
+
 ## [1.2.5] - 2026-07-24
 
 ### Fixed
