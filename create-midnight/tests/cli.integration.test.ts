@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,6 +9,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(here, '..');
 const fixtureTemplate = path.join(here, 'fixtures', 'template');
+// Resolve tsx's actual JS entry point rather than the node_modules/.bin shim: the
+// shim is a POSIX shell script on macOS/Linux and a .cmd/.ps1 wrapper on Windows,
+// neither of which `spawnSync('node', [shim, ...])` can execute directly.
+const require = createRequire(import.meta.url);
+const tsxCli = require.resolve('tsx/cli');
 
 let workDir: string;
 
@@ -20,7 +26,7 @@ afterEach(() => {
 });
 
 function runCli(args: string[], env: Record<string, string> = {}) {
-  return spawnSync('node', [path.join(packageRoot, 'node_modules', '.bin', 'tsx'), path.join(packageRoot, 'src', 'cli.ts'), ...args], {
+  return spawnSync('node', [tsxCli, path.join(packageRoot, 'src', 'cli.ts'), ...args], {
     cwd: workDir,
     env: {
       ...process.env,
@@ -124,7 +130,7 @@ describe('create-midnight CLI (real GitHub download)', () => {
   function runReal(args: string[]) {
     return spawnSync(
       'node',
-      [path.join(packageRoot, 'node_modules', '.bin', 'tsx'), path.join(packageRoot, 'src', 'cli.ts'), ...args],
+      [tsxCli, path.join(packageRoot, 'src', 'cli.ts'), ...args],
       { cwd: workDir, env: process.env, encoding: 'utf8' }
     );
   }
