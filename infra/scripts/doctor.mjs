@@ -117,7 +117,7 @@ check(
   () => {
     let out;
     try {
-      out = sh(`docker compose -f ${resolve(rootDir, 'docker', 'docker-compose.yml')} ps --format '{{.Service}} {{.State}}'`);
+      out = sh(`docker compose -f ${resolve(rootDir, 'infra', 'docker', 'docker-compose.yml')} ps --format '{{.Service}} {{.State}}'`);
     } catch {
       throw new Error('could not query compose state');
     }
