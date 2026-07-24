@@ -11,7 +11,7 @@ import { dirname, resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { DockerError, ProofServerError, classifyError, printCliError } from './errors.mjs';
 import { checkRequiredPorts, printPortConflicts } from './ports.mjs';
-import { tryRestartContainer, tryStartDocker } from './recovery.mjs';
+import { tryRestartContainer, tryStartDocker, recoverPortConflicts } from './recovery.mjs';
 
 const sh = (cmd, opts = {}) => execSync(cmd, { encoding: 'utf-8', shell: true, stdio: ['ignore', 'pipe', 'pipe'], ...opts });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -139,12 +139,13 @@ export async function ensureLocalMidnightServices(rootDir, fmt, verbose) {
     const missing = required.filter((s) => !before.has(s));
     const stopped = required.filter((s) => before.has(s) && !/running/i.test(before.get(s)));
 
-    // Only a foreign (non-Docker) process holding the port is a real conflict here — a Docker
-    // container on the port is almost certainly this project's own stack being restarted.
-    const conflicts = checkRequiredPorts().filter((c) => c.owner?.kind === 'process');
+    const conflicts = checkRequiredPorts();
     if (conflicts.length) {
-      printPortConflicts(conflicts);
-      process.exit(1);
+      const { resolved, remaining } = await recoverPortConflicts(conflicts, { fmt });
+      if (!resolved) {
+        printPortConflicts(remaining);
+        process.exit(1);
+      }
     }
 
     if (missing.length) fmt.info(`Creating container(s): ${missing.join(', ')}...`);

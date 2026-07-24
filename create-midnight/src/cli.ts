@@ -12,7 +12,7 @@ import { installDependencies } from './installer.js';
 import { initGitRepo } from './git.js';
 import { runProjectSetup } from './setup.js';
 import { CLIError, printError } from './errors.js';
-import { assertTargetAvailable, detectPackageManager } from './utils.js';
+import { assertTargetAvailable, commandExists, detectPackageManager, type PackageManager } from './utils.js';
 import { setVerbose, verbose } from './logger.js';
 
 const program = new Command();
@@ -93,9 +93,17 @@ async function main(): Promise<void> {
   console.log(pc.dim('━'.repeat(28)));
   console.log('');
 
+  const completed = {
+    template: false,
+    install: false,
+    git: false,
+    setup: false
+  };
+
   await step('Downloading template', () => downloadTemplate(templateSource, answers.targetDir), {
     successLabel: 'Downloaded template'
   });
+  completed.template = true;
 
   await step('Configuring project', () =>
     configureProject({
@@ -105,23 +113,51 @@ async function main(): Promise<void> {
     }), { successLabel: 'Project configured' });
 
   if (answers.installDeps) {
-    await step('Installing dependencies', () => installDependencies(answers.targetDir, pm), {
-      successLabel: 'Dependencies installed'
-    });
+    try {
+      await step('Installing dependencies', () => installDependencies(answers.targetDir, pm), {
+        successLabel: 'Dependencies installed'
+      });
+      completed.install = true;
+    } catch {
+      console.log(`  ${logSymbols.warning} ${pc.yellow("Couldn't install project dependencies.")}`);
+      console.log('');
+      console.log(pc.dim("  Run the following command when you're ready:"));
+      console.log(`  ${pc.cyan(`${pm} install`)}`);
+    }
   }
 
   if (answers.initGit) {
-    await step('Initializing Git', () => initGitRepo(answers.targetDir), {
-      successLabel: 'Git initialized',
-      // A failed commit (e.g. missing git identity) shouldn't abort the whole run.
-      tolerateFailure: true
-    });
+    const hasGit = await commandExists('git');
+    if (!hasGit) {
+      console.log(`  ${logSymbols.warning} ${pc.yellow("Git wasn't found.")}`);
+      console.log('');
+      console.log(pc.dim('  You can initialize the repository later with:'));
+      console.log(`  ${pc.cyan('git init')}`);
+    } else {
+      await step('Initializing Git', () => initGitRepo(answers.targetDir), {
+        successLabel: 'Git initialized',
+        // A failed commit (e.g. missing git identity) shouldn't abort the whole run.
+        tolerateFailure: true
+      });
+      completed.git = true;
+    }
   }
 
   if (answers.runSetup && answers.installDeps) {
-    await step('Running setup', () => runProjectSetup(answers.targetDir, pm), {
-      successLabel: 'Environment ready'
-    });
+    if (completed.install) {
+      try {
+        await step('Running setup', () => runProjectSetup(answers.targetDir, pm), {
+          successLabel: 'Environment ready'
+        });
+        completed.setup = true;
+      } catch {
+        console.log(`  ${logSymbols.warning} ${pc.yellow("Initial setup couldn't be completed.")}`);
+        console.log('');
+        console.log(pc.dim('  Run:'));
+        console.log(`  ${pc.cyan(`${pm} run setup`)}`);
+        console.log(pc.dim('  to finish configuring the project.'));
+      }
+    }
   } else if (answers.runSetup && !answers.installDeps) {
     console.log(`  ${logSymbols.warning} ${pc.yellow('Skipping setup: --setup requires dependencies to be installed (remove --no-install).')}`);
   }
@@ -129,7 +165,7 @@ async function main(): Promise<void> {
   console.log('');
   console.log(pc.dim('━'.repeat(28)));
 
-  printSuccessScreen(answers);
+  printSuccessScreen(answers, pm, completed);
 }
 
 interface StepOptions {
@@ -152,11 +188,23 @@ async function step(label: string, fn: () => Promise<void>, options: StepOptions
   }
 }
 
-function printSuccessScreen(answers: Awaited<ReturnType<typeof collectAnswers>>): void {
+interface CompletedSteps {
+  template: boolean;
+  install: boolean;
+  git: boolean;
+  setup: boolean;
+}
+
+function printSuccessScreen(
+  answers: Awaited<ReturnType<typeof collectAnswers>>,
+  pm: PackageManager,
+  completed: CompletedSteps
+): void {
   const networkLabel = answers.network === 'preview' ? 'Preview' : 'Preprod';
+  const check = (done: boolean) => (done ? pc.green('✓') : pc.dim('✗'));
 
   console.log('');
-  console.log(pc.bold(`🎉 Your Midnight DApp is ready!`));
+  console.log(pc.bold(`🎉 Your Midnight project is ready!`));
   console.log('');
   console.log(pc.bold('Project'));
   console.log(`  ${answers.projectName}`);
@@ -164,17 +212,22 @@ function printSuccessScreen(answers: Awaited<ReturnType<typeof collectAnswers>>)
   console.log(pc.bold('Network'));
   console.log(`  ${networkLabel}`);
   console.log('');
-  console.log(pc.bold('Frontend'));
-  console.log(`  http://localhost:3000`);
+  console.log(pc.bold('Package Manager'));
+  console.log(`  ${pm}`);
+  console.log('');
+  console.log(pc.bold('Completed'));
+  console.log(`  ${check(completed.template)} Template downloaded`);
+  console.log(`  ${check(completed.install)} Dependencies installed`);
+  console.log(`  ${check(completed.git)} Git initialized`);
+  console.log(`  ${check(completed.setup)} Setup completed`);
   console.log('');
   console.log(pc.bold('Next steps'));
   console.log(`  ${pc.cyan(`cd ${answers.projectName}`)}`);
-  if (!answers.installDeps) console.log(`  ${pc.cyan('npm install')}`);
-  if (!answers.runSetup) console.log(`  ${pc.cyan('npm run setup')}`);
-  console.log(`  ${pc.cyan('npm run dev')}`);
+  console.log(`  ${pc.cyan(`${pm} run dev`)}`);
   console.log('');
+  console.log(pc.bold('Deploy your first contract'));
   console.log(`  ${pc.cyan('cd contracts')}`);
-  console.log(`  ${pc.cyan('npm run deploy')}`);
+  console.log(`  ${pc.cyan(`${pm} run deploy`)}`);
   console.log('');
   console.log(pc.dim('━'.repeat(28)));
   console.log('');

@@ -138,3 +138,40 @@ describe('downloadTemplate (version locking, mocked network)', () => {
     expect(await fsp.readdir(destDir)).toContain('package.json');
   });
 });
+
+describe('downloadTemplate (CREATE_MIDNIGHT_LOCAL_TEMPLATE override)', () => {
+  let destDir: string;
+  const originalEnv = process.env.CREATE_MIDNIGHT_LOCAL_TEMPLATE;
+
+  beforeEach(async () => {
+    destDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'create-midnight-local-'));
+  });
+
+  afterEach(async () => {
+    await fsp.rm(destDir, { recursive: true, force: true });
+    if (originalEnv === undefined) delete process.env.CREATE_MIDNIGHT_LOCAL_TEMPLATE;
+    else process.env.CREATE_MIDNIGHT_LOCAL_TEMPLATE = originalEnv;
+  });
+
+  it('copies from the local path and bypasses network/ref resolution entirely', async () => {
+    process.env.CREATE_MIDNIGHT_LOCAL_TEMPLATE = fixtureTemplate;
+    const source = resolveTemplate('starter'); // ref would be v1.2.0, but never requested
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    await downloadTemplate(source, destDir);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    const pkg = JSON.parse(await fsp.readFile(path.join(destDir, 'package.json'), 'utf8'));
+    expect(pkg.name).toBe('midnight-starter-template');
+  });
+
+  it('throws a friendly error when the local override path does not exist', async () => {
+    process.env.CREATE_MIDNIGHT_LOCAL_TEMPLATE = path.join(os.tmpdir(), 'does-not-exist-' + Date.now());
+    const source = resolveTemplate('starter');
+
+    await expect(downloadTemplate(source, destDir)).rejects.toMatchObject({
+      message: expect.stringContaining('does not exist')
+    });
+  });
+});

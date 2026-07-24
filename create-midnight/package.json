@@ -1,6 +1,6 @@
 {
   "name": "create-midnight",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Scaffold a production-ready Midnight DApp in seconds.",
   "keywords": [
     "midnight",
@@ -12,6 +12,7 @@
     "blockchain"
   ],
   "license": "MIT",
+  "author": "Midnight Starter Template contributors",
   "type": "module",
   "engines": {
     "node": ">=18.18.0"
@@ -20,7 +21,10 @@
     "create-midnight": "./dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

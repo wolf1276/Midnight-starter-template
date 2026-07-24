@@ -10,14 +10,19 @@ function sh(cmd) {
   return execSync(cmd, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
 }
 
+// This project's containers are all named with this prefix (see docker/docker-compose.yml's
+// `container_name:` entries) — used to tell "our stack being restarted" apart from some other
+// project's container that happens to be squatting on the same port.
+export const PROJECT_CONTAINER_PREFIX = 'bboard-';
+
 function findDockerOwner(port) {
   try {
     const out = sh(`docker ps --format "{{.ID}}\t{{.Names}}\t{{.Ports}}"`);
     for (const line of out.split('\n')) {
       if (!line) continue;
-      const [, name, ports] = line.split('\t');
+      const [id, name, ports] = line.split('\t');
       if (ports && ports.includes(`:${port}->`)) {
-        return { kind: 'docker', name };
+        return { kind: 'docker', id, name, ours: name.startsWith(PROJECT_CONTAINER_PREFIX) };
       }
     }
   } catch {

@@ -6,6 +6,7 @@ import { execSync, spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { platform } from 'node:os';
 import * as ui from './ui.mjs';
+import { checkPort } from './ports.mjs';
 
 const sh = (cmd, opts = {}) => execSync(cmd, { encoding: 'utf-8', shell: true, stdio: ['ignore', 'pipe', 'pipe'], ...opts });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -90,4 +91,93 @@ export function tryRestartContainer(composeFile, service) {
 /** Convenience wrapper for the Proof Server specifically, since it's the most failure-prone service. */
 export function tryRestartProofServer(composeFile) {
   return tryRestartContainer(composeFile, 'proof-server');
+}
+
+export function tryStopContainer(nameOrId) {
+  try {
+    sh(`docker stop ${nameOrId}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function tryRemoveContainer(nameOrId) {
+  try {
+    sh(`docker rm -f ${nameOrId}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Waits for a port to actually become free after stopping/removing whatever held it. Docker
+ * doesn't always release a port allocation the instant a container stops, so a single
+ * immediate re-check can see a stale conflict — poll a few times before giving up.
+ */
+export async function waitForPortFree(port, { retries = 5, delayMs = 500 } = {}) {
+  for (let i = 0; i < retries; i++) {
+    if (checkPort(port).free) return true;
+    await sleep(delayMs);
+  }
+  return checkPort(port).free;
+}
+
+/**
+ * Attempts to automatically resolve a set of port conflicts (as returned by
+ * `checkRequiredPorts()`) before the caller gives up and fails:
+ *
+ *  - one of this project's own containers (name prefixed `bboard-`) is stopped and removed,
+ *    so the caller's subsequent `docker compose up -d` recreates it cleanly and execution
+ *    continues without any manual `docker stop`/`docker compose down`;
+ *  - a foreign Docker container is only ever stopped after the user explicitly confirms —
+ *    we tell them which container owns the port first;
+ *  - a non-Docker process is never touched automatically; it's always left in `remaining`
+ *    for the caller to report via `printPortConflicts`.
+ *
+ * Returns { resolved, remaining } — `remaining` is the subset of `conflicts` that still
+ * needs manual intervention after recovery was attempted.
+ */
+export async function recoverPortConflicts(conflicts, { fmt = ui } = {}) {
+  const remaining = [];
+
+  for (const conflict of conflicts) {
+    const { port, owner } = conflict;
+
+    if (!owner || owner.kind === 'process') {
+      // Never touch a non-Docker process automatically.
+      remaining.push(conflict);
+      continue;
+    }
+
+    if (owner.ours) {
+      fmt.warn(`Port ${port} is held by ${owner.name}, one of this project's own containers — stopping and removing it so it can be recreated...`);
+      tryStopContainer(owner.id ?? owner.name);
+      tryRemoveContainer(owner.id ?? owner.name);
+      if (await waitForPortFree(port)) {
+        fmt.info(`Port ${port} is free again.`);
+      } else {
+        remaining.push(conflict);
+      }
+      continue;
+    }
+
+    // A foreign Docker container — identify it and ask before touching it.
+    fmt.warn(`Port ${port} is held by "${owner.name}", a Docker container that does not belong to this project.`);
+    const shouldStop = await ui.confirm(`Stop container "${owner.name}" so this project can use port ${port}?`);
+    if (!shouldStop) {
+      fmt.info(`Leaving "${owner.name}" running — resolve the conflict on port ${port} manually and retry.`);
+      remaining.push(conflict);
+      continue;
+    }
+    tryStopContainer(owner.id ?? owner.name);
+    if (await waitForPortFree(port)) {
+      fmt.info(`Port ${port} is free again.`);
+    } else {
+      remaining.push(conflict);
+    }
+  }
+
+  return { resolved: remaining.length === 0, remaining };
 }

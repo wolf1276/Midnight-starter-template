@@ -3,6 +3,8 @@
 // ✓/✗/⚠ symbols, dim/bold colors, NO_COLOR support) so doctor.mjs and deploy.mjs look like
 // the same tool as the deploy CLI.
 
+import { createInterface } from 'node:readline/promises';
+
 const isTTY = Boolean(process.stdout.isTTY);
 const colorEnabled = isTTY && !process.env.NO_COLOR;
 
@@ -40,6 +42,24 @@ export const warn = (msg) => out(`${color.yellow('⚠')} ${msg}`);
 export const fail = (msg) => out(`${color.red('✗')} ${msg}`);
 
 export const isInteractive = isTTY;
+
+/**
+ * Asks a yes/no question on the TTY and resolves to the user's answer. In non-interactive
+ * contexts (CI, piped stdin) there's no one to ask — resolves to `defaultValue` immediately
+ * rather than hanging.
+ */
+export const confirm = async (question, { defaultValue = false } = {}) => {
+  if (!isTTY) return defaultValue;
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const suffix = defaultValue ? 'Y/n' : 'y/N';
+    const answer = (await rl.question(`${question} (${suffix}) `)).trim().toLowerCase();
+    if (!answer) return defaultValue;
+    return answer === 'y' || answer === 'yes';
+  } finally {
+    rl.close();
+  }
+};
 
 /** A single in-progress step: "⏳ message" that resolves to ✓/✗/⚠ in place. */
 export class Step {

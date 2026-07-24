@@ -8,7 +8,7 @@ import * as ui from './ui.mjs';
 import { classifyError, printCliError } from './errors.mjs';
 import { ensureIndexerSecret } from './infra.mjs';
 import { checkRequiredPorts, printPortConflicts } from './ports.mjs';
-import { tryStartDocker } from './recovery.mjs';
+import { tryStartDocker, recoverPortConflicts } from './recovery.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const rootDir = resolve(__dirname, '..', '..');
@@ -45,10 +45,13 @@ export async function runCompose(label, args, { checkPorts = false, requireDaemo
   }
 
   if (checkPorts) {
-    const conflicts = checkRequiredPorts().filter((c) => c.owner?.kind === 'process');
+    const conflicts = checkRequiredPorts();
     if (conflicts.length) {
-      printPortConflicts(conflicts);
-      process.exit(1);
+      const { resolved, remaining } = await recoverPortConflicts(conflicts, { fmt: ui });
+      if (!resolved) {
+        printPortConflicts(remaining);
+        process.exit(1);
+      }
     }
   }
 

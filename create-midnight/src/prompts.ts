@@ -81,40 +81,11 @@ export async function collectAnswers(flags: CliFlags): Promise<ProjectAnswers> {
     }
   }
 
-  let initGit = flags.git;
-  if (initGit === undefined) {
-    initGit = flags.yes
-      ? true
-      : handleCancel(
-          await clack.confirm({ message: 'Initialize a Git repository?', initialValue: true })
-        );
-  }
-
-  let installDeps = flags.install;
-  if (installDeps === undefined) {
-    installDeps = flags.yes
-      ? true
-      : handleCancel(
-          await clack.confirm({ message: 'Install dependencies?', initialValue: true })
-        );
-  }
-
-  let runSetup = flags.setup;
-  if (runSetup === undefined) {
-    if (!installDeps) {
-      runSetup = false;
-    } else if (flags.yes) {
-      runSetup = true;
-    } else {
-      clack.note(
-        'Setup will install/check prerequisites, build contracts,\nstart Docker, start the Proof Server, and run health checks.',
-        'Run setup after installation?'
-      );
-      runSetup = handleCancel(
-        await clack.confirm({ message: 'Run setup after installation?', initialValue: true })
-      );
-    }
-  }
+  // Everything past project name and network is automatic — no prompts.
+  // Flags remain available for scripts/tests/CI to override the defaults.
+  const initGit = flags.git ?? true;
+  const installDeps = flags.install ?? true;
+  const runSetup = flags.setup ?? true;
 
   return {
     projectName,
