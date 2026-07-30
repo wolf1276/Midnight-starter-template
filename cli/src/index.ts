@@ -32,6 +32,10 @@ import { classifyError, printCliError } from './errors.js';
 
 const verbose = process.argv.slice(2).includes('--verbose') || process.argv.slice(2).includes('--debug');
 
+// Bounds syncWallet() below: unshielded sync demands an exact zero-gap match against the
+// chain tip, which on a live network can otherwise never resolve and hang forever.
+const DEFAULT_SYNC_TIMEOUT_MS = 15 * 60 * 1000;
+
 // @ts-expect-error: It's needed to enable WebSocket usage through apollo
 globalThis.WebSocket = WebSocket;
 
@@ -231,7 +235,7 @@ export const run = async (config: Config, testEnv: TestEnvironment, logger: Logg
       const dustGeneration = await generateDust(logger, seed, unshieldedState, walletFacade);
       if (dustGeneration) {
         logger.debug(`Submitted dust generation registration transaction: ${dustGeneration}`);
-        await syncWallet(logger, walletFacade);
+        await syncWallet(logger, walletFacade, 2_000, undefined, DEFAULT_SYNC_TIMEOUT_MS);
       }
     }
 

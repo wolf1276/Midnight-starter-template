@@ -112,18 +112,20 @@ export const step = (label: string): Step => new Step(label);
 
 export const isInteractive = isTTY;
 
-/** Overwrite the current terminal line in place (for continuously-updating values like a polled balance). */
+/**
+ * Overwrite the current terminal line in place (for continuously-updating values like a polled
+ * balance). Always emits `\r` + ANSI-clear rather than gating on `isTTY`: that flag is
+ * unreliable through spawned/inherited stdio (see deploy.mjs), and getting it wrong here means
+ * every progress update prints as its own line instead of overwriting — even a plain file sink
+ * still collapses to one line when displayed, since nothing here ever writes a bare `\n`.
+ */
 export const liveLine = (text: string): void => {
-  if (isTTY) {
-    realStdoutWrite(`\r\x1b[K${text}`);
-  } else {
-    out(text);
-  }
+  realStdoutWrite(`\r\x1b[K${text}`);
 };
 
 /** Finish a run of liveLine() updates, moving to a fresh line. */
 export const endLiveLine = (): void => {
-  if (isTTY) realStdoutWrite('\n');
+  realStdoutWrite('\n');
 };
 
 /** Aligned key: value summary block. */
@@ -185,3 +187,81 @@ export const elapsedSince = (start: number): string => {
   const ms = Date.now() - start;
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
 };
+
+const shortenAddress = (address: string): string =>
+  address.length > 20 ? `${address.slice(0, 10)}…${address.slice(-6)}` : address;
+
+const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+/**
+ * A single, continuously-updating status line ("Stage · Network · Wallet · Elapsed · Detail")
+ * covering the whole deployment run, so the terminal never just sits blank/silent during a
+ * long-running stage (funding wait, sync, dust registration, contract deployment).
+ */
+export class StatusLine {
+  private readonly network: string;
+  private readonly address: string;
+  private readonly start = Date.now();
+  private stage: string;
+  private detail = '';
+  private frame = 0;
+  private timer?: ReturnType<typeof setInterval>;
+
+  constructor(network: string, address: string, stage: string) {
+    this.network = network;
+    this.address = address;
+    this.stage = stage;
+    this.startTicking();
+    this.render();
+  }
+
+  private startTicking(): void {
+    this.timer = setInterval(() => this.render(), 150);
+    this.timer.unref?.();
+  }
+
+  /** Move to a new stage (e.g. "Wallet Sync" → "DUST Registration"). */
+  setStage(stage: string, detail = ''): void {
+    this.stage = stage;
+    this.detail = detail;
+    this.render();
+  }
+
+  /** Update the trailing detail (e.g. live balance) without changing the stage. */
+  setDetail(detail: string): void {
+    this.detail = detail;
+    this.render();
+  }
+
+  private render(): void {
+    const spinner = isTTY ? SPINNER_FRAMES[this.frame++ % SPINNER_FRAMES.length] : '•';
+    const sep = color.dim(' │ ');
+    const parts = [
+      `${spinner} ${color.bold(this.stage)}`,
+      `${color.dim('Network:')} ${this.network}`,
+      `${color.dim('Wallet:')} ${shortenAddress(this.address)}`,
+      `${color.dim('Elapsed:')} ${elapsedSince(this.start)}`,
+    ];
+    if (this.detail) parts.push(this.detail);
+    liveLine(parts.join(sep));
+  }
+
+  /** Print a permanent "✓ message" line, then keep the status line going for the next stage. */
+  milestone(message: string): void {
+    if (this.timer) clearInterval(this.timer);
+    this.render();
+    endLiveLine();
+    success(message);
+    this.startTicking();
+    this.render();
+  }
+
+  /** Stop updating for good (e.g. deployment finished or failed). */
+  stop(): void {
+    if (this.timer) clearInterval(this.timer);
+    endLiveLine();
+  }
+}
+
+export const statusLine = (network: string, address: string, stage: string): StatusLine =>
+  new StatusLine(network, address, stage);

@@ -145,22 +145,28 @@ npm run build:all
 
 **What happened:** The CLI is waiting for test tokens to arrive at the deployment wallet.
 
-**Why:** The deployment wallet has a zero balance. The CLI automatically requests tokens from
-the network faucet, but this can take 1-3 minutes. If the faucet is unreachable, the CLI
-warns you within a few seconds and times out after 15 minutes.
+**Why:** The deployment wallet has a zero balance. By default the CLI does **not** request
+tokens from the faucet automatically — it prints the wallet address, faucet URL, and explorer
+URL, then polls the balance every 5 seconds until you fund it manually. This avoids hammering
+the public faucet and keeps working during faucet outages or rate limits. The CLI times out
+after 15 minutes by default.
 
 **Fix:**
-1. Check the funding screen output: it shows the wallet address and faucet URL.
+1. Check the funding screen output: it shows the wallet address, network, current/required
+   balance, faucet URL, and explorer URL.
 2. Open the faucet URL in a browser:
    - **Preview:** https://midnight-tmnight-preview.nethermind.dev/
    - **Preprod:** https://midnight-tmnight-preprod.nethermind.dev/
 3. Paste the displayed wallet address and request tokens.
 4. Wait — the CLI detects funds automatically and continues.
 
+Prefer the old automatic-faucet-request behavior? Pass `--auto-fund`. To just print the wallet
+details and exit instead of waiting, pass `--no-wait`.
+
 If funds never arrive after 15 minutes:
 1. Open the faucet URL manually and verify the address.
 2. Check your internet connection.
-3. Re-run the deployment:
+3. Re-run the deployment (raise the timeout with `--funding-timeout <minutes>` if needed):
    ```
    npm run contracts:deploy -- --network preview
    ```

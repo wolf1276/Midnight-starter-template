@@ -40,6 +40,8 @@ export const getInitialUnshieldedState = async (
   return Rx.firstValueFrom(wallet.state);
 };
 
+const verboseSyncDebug = process.env.DEBUG !== undefined || process.argv.slice(2).includes('--verbose');
+
 const isProgressStrictlyComplete = (progress: unknown): boolean => {
   if (!progress || typeof progress !== 'object') {
     return false;
@@ -56,43 +58,119 @@ const isFacadeStateSynced = (state: FacadeState): boolean =>
   isProgressStrictlyComplete(state.dust.state.progress) &&
   isProgressStrictlyComplete(state.unshielded.progress);
 
-export const syncWallet = (logger: Logger, wallet: WalletFacade, throttleTime = 2_000) => {
+type SyncLabel = 'shielded' | 'unshielded' | 'dust';
+
+/**
+ * shielded/dust progress objects come from @midnight-ntwrk/wallet-sdk-abstractions and expose
+ * appliedIndex/highestRelevantWalletIndex/highestIndex. unshielded progress comes from its own
+ * package (wallet-sdk-unshielded-wallet) with a different shape: appliedId/highestTransactionId,
+ * no highestIndex equivalent. Reading the wrong field names silently yields `undefined` instead
+ * of a type error, so pull the counters per-label instead of assuming one shared shape.
+ */
+const getSyncCounters = (
+  label: SyncLabel,
+  progress: unknown,
+): { applied: bigint; highest: bigint; isConnected: boolean } => {
+  const p = progress as Record<string, unknown>;
+  if (label === 'unshielded') {
+    return {
+      applied: p.appliedId as bigint,
+      highest: p.highestTransactionId as bigint,
+      isConnected: p.isConnected as boolean,
+    };
+  }
+  return {
+    applied: p.appliedIndex as bigint,
+    highest: p.highestRelevantWalletIndex as bigint,
+    isConnected: p.isConnected as boolean,
+  };
+};
+
+/** Debug-only: log the raw sync counters per component (behind DEBUG env var or --verbose). */
+const logSyncProgressDebug = (logger: Logger, state: FacadeState): void => {
+  if (!verboseSyncDebug) return;
+  (
+    [
+      ['shielded', state.shielded.state.progress],
+      ['unshielded', state.unshielded.progress],
+      ['dust', state.dust.state.progress],
+    ] as const
+  ).forEach(([label, progress]) => {
+    const { applied, highest, isConnected } = getSyncCounters(label, progress);
+    logger.debug(`[sync:${label}] applied=${applied} highest=${highest} isConnected=${isConnected}`);
+  });
+};
+
+/**
+ * Always includes all three components (never hides a completed one) so the UI can't imply
+ * overall sync is done while a component is still lagging. e.g.
+ * "shielded 100% ✓ · unshielded 100% ✓ · dust 38%"
+ */
+export const formatSyncProgress = (state: FacadeState): string =>
+  (
+    [
+      ['shielded', state.shielded.state.progress],
+      ['unshielded', state.unshielded.progress],
+      ['dust', state.dust.state.progress],
+    ] as const
+  )
+    .map(([label, progress]) => {
+      // isStrictlyComplete() compares "applied" against each component's own target (not the
+      // chain-wide highest), so use the same pairing here — otherwise the percentage understates
+      // progress, e.g. dust can sit near 0% for minutes while actually close to done.
+      const { applied, highest } = getSyncCounters(label, progress);
+      const pct = highest > 0n ? Number((applied * 100n) / highest) : 0;
+      const done = isProgressStrictlyComplete(progress);
+      return `${label} ${pct}%${done ? ' ✓' : ''}`;
+    })
+    .join(' · ');
+
+export class SyncTimeoutError extends Error {}
+
+export const syncWallet = (
+  logger: Logger,
+  wallet: WalletFacade,
+  throttleTime = 2_000,
+  onProgress?: (detail: string) => void,
+  timeoutMs?: number,
+) => {
   logger.debug('Syncing wallet...');
 
-  return Rx.firstValueFrom(
-    wallet.state().pipe(
-      Rx.tap((state: FacadeState) => {
-        const shieldedSynced = isProgressStrictlyComplete(state.shielded.state.progress);
-        const unshieldedSynced = isProgressStrictlyComplete(state.unshielded.progress);
-        const dustSynced = isProgressStrictlyComplete(state.dust.state.progress);
-        logger.debug(
-          `Wallet synced state emission: { shielded=${shieldedSynced}, unshielded=${unshieldedSynced}, dust=${dustSynced} }`,
-        );
-      }),
-      Rx.throttleTime(throttleTime),
-      Rx.tap((state: FacadeState) => {
-        const shieldedSynced = isProgressStrictlyComplete(state.shielded.state.progress);
-        const unshieldedSynced = isProgressStrictlyComplete(state.unshielded.progress);
-        const dustSynced = isProgressStrictlyComplete(state.dust.state.progress);
-        const isSynced = shieldedSynced && dustSynced && unshieldedSynced;
+  let obs$ = wallet.state().pipe(
+    Rx.throttleTime(throttleTime),
+    Rx.tap((state: FacadeState) => {
+      const shieldedSynced = isProgressStrictlyComplete(state.shielded.state.progress);
+      const unshieldedSynced = isProgressStrictlyComplete(state.unshielded.progress);
+      const dustSynced = isProgressStrictlyComplete(state.dust.state.progress);
+      const isSynced = shieldedSynced && dustSynced && unshieldedSynced;
 
-        logger.debug(
-          `Wallet synced state emission (synced=${isSynced}): { shielded=${shieldedSynced}, unshielded=${unshieldedSynced}, dust=${dustSynced} }`,
-        );
-      }),
-      Rx.filter((state: FacadeState) => isFacadeStateSynced(state)),
-      Rx.tap(() => logger.debug('Sync complete')),
-      Rx.tap((state: FacadeState) => {
-        const shieldedBalances = state.shielded.balances || {};
-        const unshieldedBalances = state.unshielded.balances || {};
-        const dustBalances = state.dust.balance(new Date(Date.now())) || 0n;
+      logger.debug(
+        `Wallet synced state emission (synced=${isSynced}): { shielded=${shieldedSynced}, unshielded=${unshieldedSynced}, dust=${dustSynced} }`,
+      );
+      logSyncProgressDebug(logger, state);
+      if (!isSynced) onProgress?.(`Waiting for all wallet components... ${formatSyncProgress(state)}`);
+    }),
+    Rx.filter((state: FacadeState) => isFacadeStateSynced(state)),
+    Rx.tap(() => logger.debug('Sync complete')),
+    Rx.tap((state: FacadeState) => {
+      const shieldedBalances = state.shielded.balances || {};
+      const unshieldedBalances = state.unshielded.balances || {};
+      const dustBalances = state.dust.balance(new Date(Date.now())) || 0n;
 
-        logger.debug(
-          `Wallet balances after sync - Shielded: ${JSON.stringify(shieldedBalances)}, Unshielded: ${JSON.stringify(unshieldedBalances)}, Dust: ${dustBalances}`,
-        );
-      }),
-    ),
+      logger.debug(
+        `Wallet balances after sync - Shielded: ${JSON.stringify(shieldedBalances)}, Unshielded: ${JSON.stringify(unshieldedBalances)}, Dust: ${dustBalances}`,
+      );
+    }),
   );
+  if (timeoutMs !== undefined) {
+    obs$ = obs$.pipe(Rx.timeout(timeoutMs));
+  }
+  return Rx.firstValueFrom(obs$).catch((e: unknown) => {
+    if (e instanceof Rx.TimeoutError) {
+      throw new SyncTimeoutError(`Wallet sync did not complete within ${timeoutMs}ms`);
+    }
+    throw e;
+  });
 };
 
 export const getUnshieldedAddress = async (logger: Logger, wallet: WalletFacade): Promise<string> => {

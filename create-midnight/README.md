@@ -309,12 +309,30 @@ npm run deploy
 3. **Starts services** — brings up the local node, indexer, and proof server
 4. **Builds** — compiles the contract and CLI if not already built
 5. **Creates wallet** — generates or loads a local wallet from `contracts/.midnight/`
-6. **Funds wallet** — requests tokens from the network faucet (waits up to 15 minutes if needed)
+6. **Funds wallet** — on Preview/Preprod, prints the wallet address and faucet/explorer URLs and waits for you to fund it manually, checking the balance every 5s (waits up to 15 minutes by default); Local uses the genesis-funded wallet and skips this step
 7. **Generates proof** — creates a ZK proof for the deploy transaction
 8. **Deploys** — submits the transaction and verifies it on-chain
 9. **Updates frontend** — writes the contract address to `web/.env.local`
 
 After deployment, open [localhost:3000](http://localhost:3000) with the Lace or 1AM wallet extension to interact with your contract.
+
+### Deploy flags
+
+Manual funding is the default on Preview/Preprod — it avoids hammering the public faucet and keeps working during faucet outages or rate limits.
+
+```bash
+npm run deploy -- --network preview --no-wait          # Print wallet/funding details and exit
+npm run deploy -- --network preview --auto-fund         # Restore automatic faucet requests
+npm run deploy -- --network preview --funding-timeout 30 # Wait up to 30 minutes instead of 15
+npm run deploy -- --network preview --verbose            # Show full SDK/environment logs
+```
+
+| Flag | Description |
+| --- | --- |
+| `--no-wait` | Prints the wallet address, network, balance, faucet URL, and explorer URL, then exits without waiting for funds. Re-run the same command once funded. |
+| `--auto-fund` | Requests tokens from the network faucet automatically instead of waiting for manual funding. |
+| `--funding-timeout <minutes>` | How long to wait for funds before giving up (default: 15). Also settable via `MIDNIGHT_FUNDING_TIMEOUT`. |
+| `--verbose` / `--debug` | Shows full SDK and environment logs instead of the condensed status line. |
 
 ### Wallet management
 

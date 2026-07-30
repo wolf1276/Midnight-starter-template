@@ -23,3 +23,13 @@ export function buildExplorerUrl(explorerUrlTemplate: string, contractAddress: s
   if (!explorerUrlTemplate) return '';
   return explorerUrlTemplate.replace('{contractAddress}', contractAddress);
 }
+
+/**
+ * Builds a deep link to a wallet address on the same explorer, by swapping the contract
+ * template's `/contracts/stream/{contractAddress}` path for `/address/{address}`. Returns ''
+ * if no explorer is configured, or the template doesn't match the expected shape.
+ */
+export function buildWalletExplorerUrl(explorerUrlTemplate: string, address: string): string {
+  if (!explorerUrlTemplate.includes('/contracts/stream/{contractAddress}')) return '';
+  return explorerUrlTemplate.replace('/contracts/stream/{contractAddress}', `/address/${address}`);
+}
